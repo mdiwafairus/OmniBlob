@@ -1,0 +1,35 @@
+# Copy this file to configs/config.yaml and adjust your credentials
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout_sec: 30
+  write_timeout_sec: 60
+  max_upload_size_mb: 100
+
+storage:
+  # Base directory for new sharded storage
+  root_path: "./data/storage"
+  # Legacy directory where unmigrated files reside (fallback)
+  legacy_path: "./data/legacy_uploads"
+  # Sharding structure: "date" (module/YYYY/MM/DD/file) or "hash"
+  sharding_type: "date"
+
+migration:
+  enabled: true
+  batch_size: 100
+  interval_sec: 10
+  worker_count: 4
+
+database:
+  host: "localhost"
+  port: 5432
+  username: "postgres"
+  password: "your_database_password_here"
+  name: "peduliwni"
+  sslmode: "disable"
+
+  max_open_conn: 20
+  min_open_conn: 5
+  max_idle_time: 30
+  max_life_time: 60

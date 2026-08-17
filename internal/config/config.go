@@ -1,0 +1,122 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Config struct {
+	Server    ServerConfig    `yaml:"server" mapstructure:"server"`
+	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
+	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
+	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
+}
+
+type ServerConfig struct {
+	Host            string `yaml:"host" mapstructure:"host"`
+	Port            int    `yaml:"port" mapstructure:"port"`
+	ReadTimeoutSec  int    `yaml:"read_timeout_sec" mapstructure:"read_timeout_sec"`
+	WriteTimeoutSec int    `yaml:"write_timeout_sec" mapstructure:"write_timeout_sec"`
+	MaxUploadSizeMB int    `yaml:"max_upload_size_mb" mapstructure:"max_upload_size_mb"`
+}
+
+type StorageConfig struct {
+	RootPath     string `yaml:"root_path" mapstructure:"root_path"`
+	LegacyPath   string `yaml:"legacy_path" mapstructure:"legacy_path"`
+	ShardingType string `yaml:"sharding_type" mapstructure:"sharding_type"`
+}
+
+type MigrationConfig struct {
+	Enabled     bool `yaml:"enabled" mapstructure:"enabled"`
+	BatchSize   int  `yaml:"batch_size" mapstructure:"batch_size"`
+	IntervalSec int  `yaml:"interval_sec" mapstructure:"interval_sec"`
+	WorkerCount int  `yaml:"worker_count" mapstructure:"worker_count"`
+}
+
+type DatabaseConfig struct {
+	Host        string `yaml:"host" mapstructure:"host"`
+	Port        int    `yaml:"port" mapstructure:"port"`
+	Username    string `yaml:"username" mapstructure:"username"`
+	Password    string `yaml:"password" mapstructure:"password"`
+	Name        string `yaml:"name" mapstructure:"name"`
+	SSLMode     string `yaml:"sslmode" mapstructure:"sslmode"`
+	MaxOpenConn int    `yaml:"max_open_conn" mapstructure:"max_open_conn"`
+	MinOpenConn int    `yaml:"min_open_conn" mapstructure:"min_open_conn"`
+	MaxIdleTime int    `yaml:"max_idle_time" mapstructure:"max_idle_time"`
+	MaxLifeTime int    `yaml:"max_life_time" mapstructure:"max_life_time"`
+}
+
+// loadDotEnv loads key-value pairs from a .env file into the environment if not already set.
+func loadDotEnv(envPath string) {
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		return // File .env is optional
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+			if os.Getenv(key) == "" {
+				_ = os.Setenv(key, val)
+			}
+		}
+	}
+}
+
+// LoadConfig reads the YAML configuration file from the given path and applies any environment / .env overrides.
+func LoadConfig(path string) (*Config, error) {
+	// 1. Auto-load .env if present in working directory
+	loadDotEnv(".env")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal config yaml: %w", err)
+	}
+
+	// 2. Environment variable overrides (from .env or OS / Systemd)
+	if dbHost := os.Getenv("DB_HOST"); dbHost != "" {
+		cfg.Database.Host = dbHost
+	}
+	if dbPort := os.Getenv("DB_PORT"); dbPort != "" {
+		if p, err := strconv.Atoi(dbPort); err == nil {
+			cfg.Database.Port = p
+		}
+	}
+	if dbUser := os.Getenv("DB_USER"); dbUser != "" {
+		cfg.Database.Username = dbUser
+	}
+	if dbPass := os.Getenv("DB_PASSWORD"); dbPass != "" {
+		cfg.Database.Password = dbPass
+	}
+	if dbName := os.Getenv("DB_NAME"); dbName != "" {
+		cfg.Database.Name = dbName
+	}
+	if dbSSL := os.Getenv("DB_SSLMODE"); dbSSL != "" {
+		cfg.Database.SSLMode = dbSSL
+	}
+	if srvPort := os.Getenv("PORT"); srvPort != "" {
+		if p, err := strconv.Atoi(srvPort); err == nil {
+			cfg.Server.Port = p
+		}
+	}
+	if srvHost := os.Getenv("HOST"); srvHost != "" {
+		cfg.Server.Host = srvHost
+	}
+
+	return &cfg, nil
+}

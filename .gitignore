@@ -1,0 +1,74 @@
+# ==============================================================================
+# Binaries & Executables
+# ==============================================================================
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+pwni-file-sync
+pwni-file-sync.exe
+
+# ==============================================================================
+# Sensitive Files & Environments
+# ==============================================================================
+.env
+.env.*
+*.env
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Ignore actual configuration file with database credentials
+configs/config.yaml
+configs/config.yml
+configs/config.local.yaml
+configs/config.local.yml
+
+# Keep example template
+!configs/config.example.yaml
+!configs/config.example.yml
+
+# ==============================================================================
+# Storage, Uploads & Media Files (Jangan push file fisik storage ke repository)
+# ==============================================================================
+data/
+data/storage/
+data/legacy_uploads/
+uploads/
+storage/
+temp/
+tmp/
+
+# ==============================================================================
+# Test & Sample Files
+# ==============================================================================
+test_upload.txt
+ktp_sample.txt
+*.test
+*.out
+
+# ==============================================================================
+# Logs
+# ==============================================================================
+*.log
+logs/
+
+# ==============================================================================
+# Operating System & IDE Files
+# ==============================================================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# JetBrains
+.idea/
+*.iml
+
+# Visual Studio Code (bisa kecualikan launch.json jika perlu)
+.vscode/*
+!.vscode/launch.json
