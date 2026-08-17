@@ -1,6 +1,6 @@
 # 🚀 OmniBlob
 
-**A lightweight HTTP storage and file synchronization engine built in Go, designed to decouple applications from direct filesystem and NFS I/O.**
+> **A lightweight HTTP storage and file synchronization engine built in Go, designed to decouple applications from direct filesystem and NFS I/O.**
 
 OmniBlob is a high-performance file storage and synchronization layer written in Go. It provides an HTTP-based interface between applications and traditional file systems such as **Local Storage and NFS**, while maintaining file metadata in PostgreSQL for fast lookups and reliable file management.
 
@@ -19,6 +19,7 @@ In a legacy application environment, multiple application servers were accessing
 
 Instead of allowing every application process to communicate directly with the underlying filesystem, OmniBlob introduces an **HTTP-based storage layer** between the application and the physical storage.
 
+```text
 Application
      │
      │ HTTP
@@ -36,6 +37,7 @@ Application
    ┌─────┴─────┐
    ▼           ▼
  Local Disk    NFS
+```
 
 This allows applications to interact with files through HTTP rather than directly performing filesystem operations against NFS or shared storage.
 
@@ -56,6 +58,7 @@ One of OmniBlob's primary goals is to help modernize existing applications witho
 
 Instead of migrating thousands or millions of legacy files at once, OmniBlob can process them incrementally:
 
+```text
 Legacy Files
      │
      ▼
@@ -75,6 +78,7 @@ Legacy Files
      │
      ▼
    Indexed
+```
 
 This makes it possible to gradually move from a traditional filesystem-based architecture toward an HTTP-based storage architecture.
 

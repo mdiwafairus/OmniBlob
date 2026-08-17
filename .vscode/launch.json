@@ -6,7 +6,7 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/cmd/pwni-file-sync",
+            "program": "${workspaceFolder}/cmd/file-sync",
             "cwd": "${workspaceFolder}"
         }
     ]

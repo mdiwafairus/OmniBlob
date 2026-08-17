@@ -74,6 +74,11 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // Upload handles file upload from application servers.
+// Form Data parameters:
+// - file (multipart binary file)
+// - module (e.g. "lapordiri", "paspor", "skck")
+// - referensi_id (e.g. "LP-2026-001")
+// - directory (optional)
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.writeJSON(w, http.StatusMethodNotAllowed, APIResponse{

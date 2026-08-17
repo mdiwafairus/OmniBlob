@@ -62,7 +62,7 @@ func main() {
 
 	// 6. Initialize HTTP API Server
 	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB)
-	router := api.NewRouter(handler, log)
+	router := api.NewRouter(handler, &cfg.Server, log)
 	httpServer := api.NewServer(&cfg.Server, router, log)
 
 	// Run HTTP Server in a separate goroutine

@@ -22,6 +22,9 @@ type ServerConfig struct {
 	ReadTimeoutSec  int    `yaml:"read_timeout_sec" mapstructure:"read_timeout_sec"`
 	WriteTimeoutSec int    `yaml:"write_timeout_sec" mapstructure:"write_timeout_sec"`
 	MaxUploadSizeMB int    `yaml:"max_upload_size_mb" mapstructure:"max_upload_size_mb"`
+	ApiKey          string `yaml:"api_key" mapstructure:"api_key"`
+	ApiUser         string `yaml:"api_user" mapstructure:"api_user"`
+	ApiPass         string `yaml:"api_pass" mapstructure:"api_pass"`
 }
 
 type StorageConfig struct {
@@ -116,6 +119,15 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if srvHost := os.Getenv("HOST"); srvHost != "" {
 		cfg.Server.Host = srvHost
+	}
+	if apiKey := os.Getenv("API_KEY"); apiKey != "" {
+		cfg.Server.ApiKey = apiKey
+	}
+	if apiUser := os.Getenv("API_USER"); apiUser != "" {
+		cfg.Server.ApiUser = apiUser
+	}
+	if apiPass := os.Getenv("API_PASS"); apiPass != "" {
+		cfg.Server.ApiPass = apiPass
 	}
 
 	return &cfg, nil

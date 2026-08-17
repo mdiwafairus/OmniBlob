@@ -6,6 +6,10 @@ server:
   read_timeout_sec: 30
   write_timeout_sec: 60
   max_upload_size_mb: 100
+  # Authentication settings (leave empty if not using auth)
+  api_key: "your_secret_api_key_here"
+  api_user: "your_api_username_here"
+  api_pass: "your_api_password_here"
 
 storage:
   # Base directory for new sharded storage
