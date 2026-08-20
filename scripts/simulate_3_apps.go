@@ -51,13 +51,14 @@ func main() {
 	go func() {
 		defer wg.Done()
 		clientName := "[🌐 APLIKASI 1: FE PWNI (Portal Eksternal)]"
+		feApiKey := "fe_pwni_secret_key_2026"
 		fmt.Printf("%s Mulai aktivitas warga lapor diri...\n", clientName)
 
 		// 1. Warga upload KTP
 		refID := "LP-2026-WNI-088"
 		ktpContent := []byte("DATA KTP WARGA: NIK 3171012345670001, NAMA: DIWA, STATUS: TINGGAL DI JEPANG")
 		start := time.Now()
-		binID, err := uploadFile("lapordiri", refID, "ktp_warga_diwa.jpg", "image/jpeg", ktpContent)
+		binID, err := uploadFile(feApiKey, "lapordiri", refID, "dokumen_ktp_lapor", "ktp_warga_diwa.jpg", "image/jpeg", ktpContent)
 		dur := time.Since(start)
 
 		if err != nil {
@@ -86,13 +87,14 @@ func main() {
 		defer wg.Done()
 		time.Sleep(50 * time.Millisecond) // jeda simulasi
 		clientName := "[🏢 APLIKASI 2: BE PWNI (Internal KBRI/Kemlu)]"
+		beApiKey := "be_pwni_secret_key_2026"
 		fmt.Printf("%s Mulai verifikasi berkas oleh petugas internal...\n", clientName)
 
 		// 1. Petugas mengupload Surat Keterangan / Verifikasi untuk Warga
 		refID := "LP-2026-WNI-088"
 		suratContent := []byte("SURAT KETERANGAN VERIFIKASI KBRI TOKYO: DOKUMEN LAPOR DIRI TELAH DISETUJUI.")
 		start := time.Now()
-		binID, err := uploadFile("verifikasi_kbri", refID, "surat_verifikasi_kbri.pdf", "application/pdf", suratContent)
+		binID, err := uploadFile(beApiKey, "verifikasi_kbri", refID, "dokumen_surat_keterangan", "surat_verifikasi_kbri.pdf", "application/pdf", suratContent)
 		dur := time.Since(start)
 
 		if err != nil {
@@ -120,6 +122,7 @@ func main() {
 		defer wg.Done()
 		time.Sleep(100 * time.Millisecond)
 		clientName := "[📱 APLIKASI 3: SISTEM PELAYANAN PASPOR]"
+		pelayananApiKey := "pelayanan_secret_key_2026"
 		fmt.Printf("%s Memproses permohonan paspor baru secara paralel...\n", clientName)
 
 		// Upload 3 dokumen pemohon paspor secara konkuren
@@ -129,7 +132,7 @@ func main() {
 			content := []byte(fmt.Sprintf("DATA FOTO BIOMETRIK PASPOR PEMOHON #%d UKURAN 4X6", i))
 
 			start := time.Now()
-			binID, err := uploadFile("paspor", refID, filename, "image/png", content)
+			binID, err := uploadFile(pelayananApiKey, "paspor", refID, "dokumen_paspor_lapor", filename, "image/png", content)
 			dur := time.Since(start)
 
 			if err != nil {
@@ -169,11 +172,15 @@ func main() {
 	fmt.Println("======================================================================")
 }
 
-func uploadFile(module, refID, filename, mimeType string, data []byte) (int64, error) {
+func uploadFile(apiKey, module, refID, flag, filename, mimeType string, data []byte) (int64, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
+
 	_ = writer.WriteField("module", module)
 	_ = writer.WriteField("referensi_id", refID)
+	if flag != "" {
+		_ = writer.WriteField("flag", flag)
+	}
 
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
@@ -189,6 +196,9 @@ func uploadFile(module, refID, filename, mimeType string, data []byte) (int64, e
 		return 0, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if apiKey != "" {
+		req.Header.Set("X-API-KEY", apiKey)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -48,6 +48,37 @@ func (r *binaryFileRepository) GetByID(ctx context.Context, binID int64) (*entit
 	return &f, nil
 }
 
+func (r *binaryFileRepository) GetByFileName(ctx context.Context, fileName string) (*entity.BinaryFile, error) {
+	const query = `
+		SELECT bin_id, 
+		       COALESCE(referensi_id, ''), 
+		       COALESCE(module, ''), 
+		       COALESCE(directory, ''), 
+		       COALESCE(file_name, ''), 
+		       COALESCE(path, ''), 
+		       COALESCE(size, 0), 
+		       COALESCE(mime_type, ''), 
+		       COALESCE(checksum, ''), 
+		       COALESCE(flag, '1'), 
+		       COALESCE(create_date, NOW())
+		FROM binary_file
+		WHERE file_name = $1
+		ORDER BY bin_id DESC
+		LIMIT 1
+	`
+	var f entity.BinaryFile
+	row := r.db.QueryRow(ctx, query, fileName)
+	err := row.Scan(
+		&f.BinID, &f.ReferensiID, &f.Module, &f.Directory,
+		&f.FileName, &f.Path, &f.Size, &f.MimeType,
+		&f.Checksum, &f.Flag, &f.CreateDate,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("GetByFileName: %w", err)
+	}
+	return &f, nil
+}
+
 func (r *binaryFileRepository) GetByReferensiID(ctx context.Context, referensiID string, module string) ([]entity.BinaryFile, error) {
 	query := `
 		SELECT bin_id, 

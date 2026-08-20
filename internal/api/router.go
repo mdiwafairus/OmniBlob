@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -17,8 +16,8 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Ha
 	// Health check (Public)
 	mux.HandleFunc("/health", h.HealthCheck)
 
-	// API Routes (Upload is Protected with Auth)
-	uploadHandler := authMiddleware(cfg, h.Upload)
+	// API Routes (Upload is Protected with Per-App Auth)
+	uploadHandler := AppAuthMiddleware(cfg, log, h.Upload)
 	mux.HandleFunc("/api/v1/files/upload", uploadHandler)
 	mux.HandleFunc("/api/v1/files/view", h.ServeFileByRef)
 	mux.HandleFunc("/api/v1/files/", func(w http.ResponseWriter, r *http.Request) {
@@ -44,56 +43,6 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Ha
 	handler = recoveryMiddleware(handler, log)
 
 	return handler
-}
-
-// authMiddleware validates X-API-KEY header, Basic Auth (user & password), or custom headers.
-func authMiddleware(cfg *config.ServerConfig, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// If no auth is configured, allow all
-		if cfg == nil || (cfg.ApiKey == "" && cfg.ApiUser == "" && cfg.ApiPass == "") {
-			next(w, r)
-			return
-		}
-
-		// 1. Check X-API-KEY header
-		clientKey := strings.TrimSpace(r.Header.Get("X-API-KEY"))
-		if clientKey == "" {
-			clientKey = strings.TrimSpace(r.Header.Get("X-Api-Key"))
-		}
-		if cfg.ApiKey != "" && clientKey != "" && clientKey == cfg.ApiKey {
-			next(w, r)
-			return
-		}
-
-		// 2. Check HTTP Basic Auth (user:password)
-		user, pass, hasBasic := r.BasicAuth()
-		if hasBasic && cfg.ApiUser != "" && cfg.ApiPass != "" {
-			if user == cfg.ApiUser && pass == cfg.ApiPass {
-				next(w, r)
-				return
-			}
-		}
-
-		// 3. Check X-API-USER and X-API-PASS headers
-		customUser := strings.TrimSpace(r.Header.Get("X-API-USER"))
-		customPass := strings.TrimSpace(r.Header.Get("X-API-PASS"))
-		if customUser != "" && customPass != "" && cfg.ApiUser != "" && cfg.ApiPass != "" {
-			if customUser == cfg.ApiUser && customPass == cfg.ApiPass {
-				next(w, r)
-				return
-			}
-		}
-
-		// 4. If authentication fails -> return 401 Unauthorized
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Connection", "close")
-		w.Header().Set("WWW-Authenticate", `Basic realm="PWNI Storage Access"`)
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"error":   "Unauthorized: Invalid or missing API credentials (X-API-KEY or Basic Auth required)",
-		})
-	}
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

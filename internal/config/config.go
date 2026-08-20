@@ -16,15 +16,24 @@ type Config struct {
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
 }
 
+type ClientConfig struct {
+	Name           string   `yaml:"name" mapstructure:"name"`
+	ApiKey         string   `yaml:"api_key" mapstructure:"api_key"`
+	User           string   `yaml:"user" mapstructure:"user"`
+	Password       string   `yaml:"password" mapstructure:"password"`
+	AllowedModules []string `yaml:"allowed_modules" mapstructure:"allowed_modules"`
+}
+
 type ServerConfig struct {
-	Host            string `yaml:"host" mapstructure:"host"`
-	Port            int    `yaml:"port" mapstructure:"port"`
-	ReadTimeoutSec  int    `yaml:"read_timeout_sec" mapstructure:"read_timeout_sec"`
-	WriteTimeoutSec int    `yaml:"write_timeout_sec" mapstructure:"write_timeout_sec"`
-	MaxUploadSizeMB int    `yaml:"max_upload_size_mb" mapstructure:"max_upload_size_mb"`
-	ApiKey          string `yaml:"api_key" mapstructure:"api_key"`
-	ApiUser         string `yaml:"api_user" mapstructure:"api_user"`
-	ApiPass         string `yaml:"api_pass" mapstructure:"api_pass"`
+	Host            string         `yaml:"host" mapstructure:"host"`
+	Port            int            `yaml:"port" mapstructure:"port"`
+	ReadTimeoutSec  int            `yaml:"read_timeout_sec" mapstructure:"read_timeout_sec"`
+	WriteTimeoutSec int            `yaml:"write_timeout_sec" mapstructure:"write_timeout_sec"`
+	MaxUploadSizeMB int            `yaml:"max_upload_size_mb" mapstructure:"max_upload_size_mb"`
+	ApiKey          string         `yaml:"api_key" mapstructure:"api_key"`
+	ApiUser         string         `yaml:"api_user" mapstructure:"api_user"`
+	ApiPass         string         `yaml:"api_pass" mapstructure:"api_pass"`
+	Clients         []ClientConfig `yaml:"clients" mapstructure:"clients"`
 }
 
 type StorageConfig struct {

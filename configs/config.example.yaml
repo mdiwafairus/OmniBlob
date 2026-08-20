@@ -6,10 +6,31 @@ server:
   read_timeout_sec: 30
   write_timeout_sec: 60
   max_upload_size_mb: 100
-  # Authentication settings (leave empty if not using auth)
+
+  # Global / Fallback Authentication
   api_key: "your_secret_api_key_here"
   api_user: "your_api_username_here"
   api_pass: "your_api_password_here"
+
+  # Per-Application Authentication Clients
+  clients:
+    - name: "fe-pwni"
+      api_key: "fe_pwni_secret_key_here"
+      user: "fe_pwni"
+      password: "fe_pwni_password_here"
+      allowed_modules: ["*"]
+
+    - name: "be-pwni"
+      api_key: "be_pwni_secret_key_here"
+      user: "be_pwni"
+      password: "be_pwni_password_here"
+      allowed_modules: ["*"]
+
+    - name: "pelayanan-app"
+      api_key: "pelayanan_secret_key_here"
+      user: "pelayanan_app"
+      password: "pelayanan_password_here"
+      allowed_modules: ["*"]
 
 storage:
   # Base directory for new sharded storage

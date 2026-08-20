@@ -8,6 +8,7 @@ import (
 
 type BinaryFileRepository interface {
 	GetByID(ctx context.Context, binID int64) (*entity.BinaryFile, error)
+	GetByFileName(ctx context.Context, fileName string) (*entity.BinaryFile, error)
 	GetByReferensiID(ctx context.Context, referensiID string, module string) ([]entity.BinaryFile, error)
 	GetPendingFiles(ctx context.Context, lastBinID int64, limit int) ([]entity.BinaryFile, error)
 	Insert(ctx context.Context, file *entity.BinaryFile) (int64, error)

@@ -186,11 +186,17 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	appName := "anonymous"
+	if client := GetClientFromContext(r.Context()); client != nil {
+		appName = client.Name
+	}
+
 	h.logger.Info().
+		Str("app", appName).
 		Int64("bin_id", binID).
 		Str("module", module).
 		Str("referensi_id", referensiID).
-		Str("filename", header.Filename).
+		Str("filename", customFileName).
 		Int64("size_bytes", size).
 		Str("checksum", checksum).
 		Msg("File uploaded and indexed successfully")
@@ -221,16 +227,18 @@ func (h *Handler) ServeFileByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	idStr := pathParts[3]
+	var fileMeta *entity.BinaryFile
 	binID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "Invalid file ID"})
-		return
+	if err == nil {
+		// 1. Fetch metadata from PostgreSQL by bin_id
+		fileMeta, err = h.binaryRepo.GetByID(r.Context(), binID)
+	} else {
+		// 1. Fetch metadata from PostgreSQL by file_name
+		fileMeta, err = h.binaryRepo.GetByFileName(r.Context(), idStr)
 	}
 
-	// 1. Fetch metadata from PostgreSQL (~1 ms)
-	fileMeta, err := h.binaryRepo.GetByID(r.Context(), binID)
-	if err != nil {
-		h.logger.Warn().Int64("bin_id", binID).Err(err).Msg("File metadata not found in database")
+	if err != nil || fileMeta == nil {
+		h.logger.Warn().Str("id_or_name", idStr).Err(err).Msg("File metadata not found in database")
 		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found in database index"})
 		return
 	}

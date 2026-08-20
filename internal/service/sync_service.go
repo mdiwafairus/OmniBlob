@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"pwni-file-sync/internal/config"
@@ -113,9 +114,21 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 		Int64("from_bin_id", lastBinID).
 		Msg("Processing file migration batch to sharded storage...")
 
+	workers := s.cfg.WorkerCount
+	if workers <= 0 {
+		workers = 2
+	}
+	if workers > 8 {
+		workers = 8 // Safety cap agar tidak membebani I/O disk
+	}
+
+	var mu sync.Mutex
 	var executedIDs []int64
 	var highestBinID int64 = lastBinID
 	var errorCount int
+
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
 
 	for _, file := range pendingFiles {
 		if file.BinID > highestBinID {
@@ -124,39 +137,57 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 
 		// If file is already marked migrated and exists in new sharded format, skip
 		if file.Flag == "M" && strings.Contains(file.Path, "/") {
+			mu.Lock()
 			executedIDs = append(executedIDs, file.BinID)
+			mu.Unlock()
 			continue
 		}
 
-		// Try resolving legacy source path
-		legacyPath := file.Path
-		if legacyPath == "" {
-			legacyPath = filepath.Join(file.Directory, file.FileName)
-			if file.Directory == "" {
-				legacyPath = filepath.Join(file.Module, file.FileName)
+		wg.Add(1)
+		sem <- struct{}{} // Acquire worker slot
+
+		go func(f entity.BinaryFile) {
+			defer wg.Done()
+			defer func() { <-sem }() // Release worker slot
+
+			// Try resolving legacy source path
+			legacyPath := f.Path
+			if legacyPath == "" {
+				legacyPath = filepath.Join(f.Directory, f.FileName)
+				if f.Directory == "" {
+					legacyPath = filepath.Join(f.Module, f.FileName)
+				}
 			}
-		}
 
-		// Migrate local file to sharded layout
-		newRelPath, checksum, size, err := s.storageRepo.MigrateLegacyFile(
-			ctx, legacyPath, file.Module, file.BinID, file.FileName, file.CreateDate,
-		)
+			// Migrate local file to sharded layout
+			newRelPath, checksum, size, err := s.storageRepo.MigrateLegacyFile(
+				ctx, legacyPath, f.Module, f.BinID, f.FileName, f.CreateDate,
+			)
 
-		if err != nil {
-			// Physical file might not exist yet on disk
-			errorCount++
-			continue
-		}
+			if err != nil {
+				mu.Lock()
+				errorCount++
+				mu.Unlock()
+				return
+			}
 
-		// Update database record with new sharded path and checksum
-		if err := s.binaryRepo.UpdatePathAndStatus(ctx, file.BinID, newRelPath, checksum, size, "M"); err != nil {
-			s.logger.Error().Err(err).Int64("bin_id", file.BinID).Msg("Failed to update migrated path in database")
-			errorCount++
-			continue
-		}
+			// Update database record with new sharded path and checksum
+			if err := s.binaryRepo.UpdatePathAndStatus(ctx, f.BinID, newRelPath, checksum, size, "M"); err != nil {
+				s.logger.Error().Err(err).Int64("bin_id", f.BinID).Msg("Failed to update migrated path in database")
+				mu.Lock()
+				errorCount++
+				mu.Unlock()
+				return
+			}
 
-		executedIDs = append(executedIDs, file.BinID)
+			mu.Lock()
+			executedIDs = append(executedIDs, f.BinID)
+			mu.Unlock()
+		}(file)
 	}
+
+	// Wait for current batch workers to finish
+	wg.Wait()
 
 	// 3. Record checkpoint to log_file_rsync
 	if len(executedIDs) > 0 || highestBinID > lastBinID {
@@ -173,5 +204,6 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 		Int("migrated", len(executedIDs)).
 		Int("errors", errorCount).
 		Int64("checkpoint_bin_id", highestBinID).
+		Int("active_workers", workers).
 		Msg("Batch migration completed successfully")
 }
