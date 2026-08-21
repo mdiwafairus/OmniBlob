@@ -61,6 +61,17 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, resp APIResponse)
 	_, _ = w.Write(data)
 }
 
+func getBucket(r *http.Request) string {
+	bucket := r.PathValue("bucket")
+	if bucket == "" {
+		bucket = r.Header.Get("X-Bucket")
+	}
+	if bucket == "" {
+		bucket = "files" // backward compatible physical folder
+	}
+	return bucket
+}
+
 // HealthCheck returns service & database health status.
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, APIResponse{
@@ -141,8 +152,10 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		customFileName = header.Filename
 	}
 
+	bucket := getBucket(r)
+
 	// 1. Stream file directly to storage & compute checksum
-	relPath, checksum, size, err := h.storageRepo.Save(r.Context(), customPath, module, directory, referensiID, 0, customFileName, file)
+	relPath, checksum, size, err := h.storageRepo.Save(r.Context(), bucket, customPath, module, directory, referensiID, 0, customFileName, file)
 	if err != nil {
 		h.logger.Error().Err(err).Str("file", customFileName).Msg("Failed to save file to storage")
 		h.writeJSON(w, http.StatusInternalServerError, APIResponse{

@@ -161,7 +161,7 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 
 			// Migrate local file to sharded layout
 			newRelPath, checksum, size, err := s.storageRepo.MigrateLegacyFile(
-				ctx, legacyPath, f.Module, f.BinID, f.FileName, f.CreateDate,
+				ctx, "uploads", legacyPath, f.Module, f.BinID, f.FileName, f.CreateDate,
 			)
 
 			if err != nil {

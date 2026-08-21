@@ -18,18 +18,19 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Ha
 
 	// API Routes (Upload is Protected with Per-App Auth)
 	uploadHandler := AppAuthMiddleware(cfg, log, h.Upload)
-	mux.HandleFunc("/api/v1/files/upload", uploadHandler)
-	mux.HandleFunc("/api/v1/files/view", h.ServeFileByRef)
-	mux.HandleFunc("/api/v1/files/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/files/upload" {
+	mux.HandleFunc("/api/v1/{bucket}/upload", uploadHandler)
+	mux.HandleFunc("/api/v1/{bucket}/view", h.ServeFileByRef)
+	mux.HandleFunc("/api/v1/{bucket}/", func(w http.ResponseWriter, r *http.Request) {
+		bucket := r.PathValue("bucket")
+		if r.URL.Path == "/api/v1/"+bucket+"/upload" {
 			uploadHandler(w, r)
 			return
 		}
-		if r.URL.Path == "/api/v1/files/view" {
+		if r.URL.Path == "/api/v1/"+bucket+"/view" {
 			h.ServeFileByRef(w, r)
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/api/v1/files/") {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/"+bucket+"/") {
 			h.ServeFileByID(w, r)
 			return
 		}
