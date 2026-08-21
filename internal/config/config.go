@@ -11,10 +11,17 @@ import (
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server" mapstructure:"server"`
+	Auth      AuthConfig      `yaml:"auth" mapstructure:"auth"`
 	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
 	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
 }
+
+type AuthConfig struct {
+	AccessKey string `yaml:"access_key" mapstructure:"access_key"`
+	SecretKey string `yaml:"secret_key" mapstructure:"secret_key"`
+}
+
 
 type ClientConfig struct {
 	Name           string   `yaml:"name" mapstructure:"name"`
@@ -137,6 +144,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if apiPass := os.Getenv("API_PASS"); apiPass != "" {
 		cfg.Server.ApiPass = apiPass
+	}
+	if accessKey := os.Getenv("MINIO_ACCESS_KEY"); accessKey != "" {
+		cfg.Auth.AccessKey = accessKey
+	}
+	if secretKey := os.Getenv("MINIO_SECRET_KEY"); secretKey != "" {
+		cfg.Auth.SecretKey = secretKey
 	}
 
 	return &cfg, nil

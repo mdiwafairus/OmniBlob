@@ -8,17 +8,32 @@ import (
 	"pwni-file-sync/internal/config"
 
 	"github.com/rs/zerolog"
+	"pwni-file-sync/internal/auth"
 )
 
-func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Handler {
+func NewRouter(h *Handler, cfg *config.ServerConfig, secretKey string, log zerolog.Logger) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health check (Public)
 	mux.HandleFunc("/health", h.HealthCheck)
 
-	// API Routes (Upload is Protected with Per-App Auth)
+	// Presign URL generator (requires AppAuthMiddleware)
+	presignHandler := AppAuthMiddleware(cfg, log, h.GeneratePresignedURL)
+	mux.HandleFunc("/api/v1/presign", presignHandler)
+
+	// API Routes (Upload is Protected with Per-App Auth OR Presigned URL)
 	uploadHandler := AppAuthMiddleware(cfg, log, h.Upload)
-	mux.HandleFunc("/api/v1/{bucket}/upload", uploadHandler)
+	
+	// Create a wrapper that checks presigned URL first, then falls back to AppAuthMiddleware
+	secureUploadHandler := func(w http.ResponseWriter, r *http.Request) {
+		if auth.ValidatePresignedURL(r, secretKey) {
+			h.Upload(w, r)
+			return
+		}
+		uploadHandler(w, r)
+	}
+
+	mux.HandleFunc("/api/v1/{bucket}/upload", secureUploadHandler)
 	mux.HandleFunc("/api/v1/{bucket}/view", h.ServeFileByRef)
 	mux.HandleFunc("/api/v1/{bucket}/", func(w http.ResponseWriter, r *http.Request) {
 		bucket := r.PathValue("bucket")

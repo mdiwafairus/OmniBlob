@@ -61,8 +61,8 @@ func main() {
 	go migrationService.StartBackgroundMigration(ctx)
 
 	// 6. Initialize HTTP API Server
-	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB)
-	router := api.NewRouter(handler, &cfg.Server, log)
+	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
+	router := api.NewRouter(handler, &cfg.Server, cfg.Auth.SecretKey, log)
 	httpServer := api.NewServer(&cfg.Server, router, log)
 
 	// Run HTTP Server in a separate goroutine

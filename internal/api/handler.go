@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"pwni-file-sync/internal/auth"
 	"pwni-file-sync/internal/entity"
 	"pwni-file-sync/internal/repository"
 	"pwni-file-sync/internal/storage"
@@ -18,10 +19,12 @@ import (
 )
 
 type Handler struct {
-	storageRepo *storage.StorageService
-	binaryRepo  repository.BinaryFileRepository
-	logger      zerolog.Logger
-	maxUploadMB int64
+	storageRepo  *storage.StorageService
+	binaryRepo   repository.BinaryFileRepository
+	logger       zerolog.Logger
+	maxUploadMB  int64
+	accessKey    string
+	secretKey    string
 }
 
 func NewHandler(
@@ -29,15 +32,19 @@ func NewHandler(
 	binaryRepo repository.BinaryFileRepository,
 	logger zerolog.Logger,
 	maxUploadMB int,
+	accessKey string,
+	secretKey string,
 ) *Handler {
 	if maxUploadMB <= 0 {
 		maxUploadMB = 100
 	}
 	return &Handler{
-		storageRepo: storageRepo,
-		binaryRepo:  binaryRepo,
-		logger:      logger,
-		maxUploadMB: int64(maxUploadMB),
+		storageRepo:  storageRepo,
+		binaryRepo:   binaryRepo,
+		logger:       logger,
+		maxUploadMB:  int64(maxUploadMB),
+		accessKey:    accessKey,
+		secretKey:    secretKey,
 	}
 }
 
@@ -313,4 +320,56 @@ func (h *Handler) ServeFileByRef(w http.ResponseWriter, r *http.Request) {
 	target := files[0]
 	r.URL.Path = fmt.Sprintf("/api/v1/files/%d", target.BinID)
 	h.ServeFileByID(w, r)
+}
+
+// PresignRequest represents the request body for generating a presigned URL
+type PresignRequest struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+	Expiry int    `json:"expiry"` // in seconds
+}
+
+// GeneratePresignedURL generates a MinIO-style presigned URL
+func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.writeJSON(w, http.StatusMethodNotAllowed, APIResponse{Success: false, Error: "Method not allowed"})
+		return
+	}
+
+	var req PresignRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "Invalid JSON body"})
+		return
+	}
+
+	if req.Expiry <= 0 {
+		req.Expiry = 3600 // default 1 hour
+	}
+	if req.Method == "" {
+		req.Method = http.MethodGet
+	}
+	if req.Path == "" {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "path is required"})
+		return
+	}
+
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+
+	presigned, err := auth.GeneratePresignedURL(req.Method, baseURL, req.Path, h.accessKey, h.secretKey, time.Duration(req.Expiry)*time.Second)
+	if err != nil {
+		h.writeJSON(w, http.StatusInternalServerError, APIResponse{Success: false, Error: "Failed to generate presigned URL"})
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, APIResponse{
+		Success: true,
+		Data: map[string]string{
+			"presigned_url": presigned,
+			"expires_in":    fmt.Sprintf("%ds", req.Expiry),
+		},
+	})
 }
