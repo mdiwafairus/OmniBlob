@@ -51,6 +51,7 @@ func main() {
 	// 4. Initialize Repositories
 	binaryRepo := repository.NewBinaryFileRepository(dbPool)
 	logRepo := repository.NewLogRepository(dbPool)
+	orphanRepo := repository.NewOrphanLogRepository(dbPool)
 
 	// Context for graceful background jobs
 	ctx, cancel := context.WithCancel(context.Background())
@@ -76,7 +77,7 @@ func main() {
 			GracePeriodDays: 1,
 			MaxMoveLimit:    100,
 		}
-		dedupSvc := service.NewDedupService(dedupCfg, binaryRepo, log)
+		dedupSvc := service.NewDedupService(dedupCfg, binaryRepo, orphanRepo, log)
 		if err := dedupSvc.FindAndQuarantineOrphans(ctx); err != nil {
 			log.Fatal().Err(err).Msg("Quarantine process failed")
 		}

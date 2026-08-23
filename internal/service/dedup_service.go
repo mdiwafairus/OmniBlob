@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"pwni-file-sync/internal/entity"
 	"pwni-file-sync/internal/repository"
 	"pwni-file-sync/pkg/fileutil"
 
@@ -25,10 +26,11 @@ type DedupConfig struct {
 type DedupService struct {
 	cfg        *DedupConfig
 	binaryRepo repository.BinaryFileRepository
+	orphanRepo repository.OrphanLogRepository
 	logger     zerolog.Logger
 }
 
-func NewDedupService(cfg *DedupConfig, binaryRepo repository.BinaryFileRepository, logger zerolog.Logger) *DedupService {
+func NewDedupService(cfg *DedupConfig, binaryRepo repository.BinaryFileRepository, orphanRepo repository.OrphanLogRepository, logger zerolog.Logger) *DedupService {
 	if cfg.GracePeriodDays <= 0 {
 		cfg.GracePeriodDays = 1 // Default safety: 24 hours
 	}
@@ -42,6 +44,7 @@ func NewDedupService(cfg *DedupConfig, binaryRepo repository.BinaryFileRepositor
 	return &DedupService{
 		cfg:        cfg,
 		binaryRepo: binaryRepo,
+		orphanRepo: orphanRepo,
 		logger:     logger,
 	}
 }
@@ -130,9 +133,24 @@ func (s *DedupService) FindAndQuarantineOrphans(ctx context.Context) error {
 		relPath, _ := filepath.Rel(s.cfg.StorageRoot, orphanPath)
 		targetPath := filepath.Join(s.cfg.QuarantineRoot, relPath)
 
+		fileInfo, err := os.Stat(orphanPath)
+		var fileSize int64
+		if err == nil {
+			fileSize = fileInfo.Size()
+		}
+
+		logEntry := &entity.OrphanFileLog{
+			OriginalPath:   relPath,
+			QuarantinePath: filepath.Join("_quarantine", relPath),
+			Size:           fileSize,
+			Reason:         "Orphan File - Not in DB",
+		}
+
 		// Guardrail 3: Dry-Run Mode
 		if s.cfg.DryRun {
 			s.logger.Info().Str("file", relPath).Msg("[DRY RUN] Would move file to quarantine")
+			logEntry.Action = "DRY_RUN"
+			_ = s.orphanRepo.Insert(ctx, logEntry)
 			continue
 		}
 
@@ -150,6 +168,8 @@ func (s *DedupService) FindAndQuarantineOrphans(ctx context.Context) error {
 
 		movedCount++
 		s.logger.Info().Str("file", relPath).Msg("Moved orphan file to quarantine")
+		logEntry.Action = "QUARANTINED"
+		_ = s.orphanRepo.Insert(ctx, logEntry)
 	}
 
 	if s.cfg.DryRun {

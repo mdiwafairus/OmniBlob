@@ -20,3 +20,7 @@ type LogRepository interface {
 	GetLastBinID(ctx context.Context, server string) (int64, error)
 	Insert(ctx context.Context, log entity.LogFileRsync) error
 }
+
+type OrphanLogRepository interface {
+	Insert(ctx context.Context, log *entity.OrphanFileLog) error
+}
