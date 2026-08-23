@@ -56,6 +56,33 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Parse flags
+	runQuarantine := false
+	dryRun := true
+	for _, arg := range os.Args[1:] {
+		if arg == "--quarantine" {
+			runQuarantine = true
+			dryRun = false
+		} else if arg == "--quarantine-dryrun" {
+			runQuarantine = true
+			dryRun = true
+		}
+	}
+
+	if runQuarantine {
+		dedupCfg := &service.DedupConfig{
+			StorageRoot:     cfg.Storage.RootPath,
+			DryRun:          dryRun,
+			GracePeriodDays: 1,
+			MaxMoveLimit:    100,
+		}
+		dedupSvc := service.NewDedupService(dedupCfg, binaryRepo, log)
+		if err := dedupSvc.FindAndQuarantineOrphans(ctx); err != nil {
+			log.Fatal().Err(err).Msg("Quarantine process failed")
+		}
+		return // Exit after running command
+	}
+
 	// 5. Start Background File Migration Worker (reorganizing legacy NFS files locally)
 	migrationService := service.NewMigrationService(&cfg.Migration, storageService, binaryRepo, logRepo, log)
 	go migrationService.StartBackgroundMigration(ctx)

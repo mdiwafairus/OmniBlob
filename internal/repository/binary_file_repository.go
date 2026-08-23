@@ -208,3 +208,16 @@ func (r *binaryFileRepository) UpdatePathAndStatus(ctx context.Context, binID in
 	}
 	return nil
 }
+
+func (r *binaryFileRepository) ExistsByPath(ctx context.Context, path string) (bool, error) {
+	const query = `SELECT 1 FROM binary_file WHERE path = $1 LIMIT 1`
+	var exists int
+	err := r.db.QueryRow(ctx, query, path).Scan(&exists)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return false, nil
+		}
+		return false, fmt.Errorf("ExistsByPath: %w", err)
+	}
+	return true, nil
+}
