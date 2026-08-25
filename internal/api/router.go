@@ -18,11 +18,18 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Ha
 
 	// API Routes (Upload is Protected with Per-App Auth)
 	uploadHandler := AppAuthMiddleware(cfg, log, h.Upload)
+	bulkUploadHandler := AppAuthMiddleware(cfg, log, h.BulkUpload)
+	
 	mux.HandleFunc("/api/v1/files/upload", uploadHandler)
+	mux.HandleFunc("/api/v1/files/bulk-upload", bulkUploadHandler)
 	mux.HandleFunc("/api/v1/files/view", h.ServeFileByRef)
 	mux.HandleFunc("/api/v1/files/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/files/upload" {
 			uploadHandler(w, r)
+			return
+		}
+		if r.URL.Path == "/api/v1/files/bulk-upload" {
+			bulkUploadHandler(w, r)
 			return
 		}
 		if r.URL.Path == "/api/v1/files/view" {

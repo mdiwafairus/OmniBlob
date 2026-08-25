@@ -160,9 +160,7 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 			}
 
 			// Migrate local file to sharded layout
-			newRelPath, checksum, size, err := s.storageRepo.MigrateLegacyFile(
-				ctx, legacyPath, f.Module, f.BinID, f.FileName, f.CreateDate,
-			)
+			newRelPath, checksum, size, err := s.storageRepo.MigrateLegacyFile(ctx, f.Module, legacyPath, f.Module, f.BinID, f.FileName, f.CreateDate)
 
 			if err != nil {
 				mu.Lock()
@@ -207,3 +205,4 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 		Int("active_workers", workers).
 		Msg("Batch migration completed successfully")
 }
+

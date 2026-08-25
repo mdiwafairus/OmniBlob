@@ -142,7 +142,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Stream file directly to storage & compute checksum
-	relPath, checksum, size, err := h.storageRepo.Save(r.Context(), customPath, module, directory, referensiID, 0, customFileName, file)
+	relPath, checksum, size, err := h.storageRepo.Save(r.Context(), module, customPath, module, directory, referensiID, 0, customFileName, file)
 	if err != nil {
 		h.logger.Error().Err(err).Str("file", customFileName).Msg("Failed to save file to storage")
 		h.writeJSON(w, http.StatusInternalServerError, APIResponse{
@@ -301,3 +301,100 @@ func (h *Handler) ServeFileByRef(w http.ResponseWriter, r *http.Request) {
 	r.URL.Path = fmt.Sprintf("/api/v1/files/%d", target.BinID)
 	h.ServeFileByID(w, r)
 }
+// BulkUpload handles multiple file uploads in a single request.
+func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.writeJSON(w, http.StatusMethodNotAllowed, APIResponse{Success: false, Error: "Method not allowed"})
+		return
+	}
+
+	maxBytes := h.maxUploadMB << 20
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+
+	if err := r.ParseMultipartForm(maxBytes); err != nil {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to parse multipart form: %v", err),
+		})
+		return
+	}
+
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
+		files = r.MultipartForm.File["file"] // fallback
+	}
+	if len(files) == 0 {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "Missing files"})
+		return
+	}
+
+	module := strings.TrimSpace(r.FormValue("module"))
+	if module == "" { module = "general" }
+	referensiID := strings.TrimSpace(r.FormValue("referensi_id"))
+	directory := strings.TrimSpace(r.FormValue("directory"))
+	flagVal := strings.TrimSpace(r.FormValue("flag"))
+	if flagVal == "" { flagVal = "1" }
+
+	type FileResult struct {
+		FileName string `json:"file_name"`
+		BinID    int64  `json:"bin_id,omitempty"`
+		Path     string `json:"path,omitempty"`
+		URL      string `json:"url,omitempty"`
+		Error    string `json:"error,omitempty"`
+	}
+	var results []FileResult
+
+	for _, header := range files {
+		file, err := header.Open()
+		if err != nil {
+			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
+			continue
+		}
+		
+		relPath, checksum, size, err := h.storageRepo.Save(r.Context(), module, "", module, directory, referensiID, 0, header.Filename, file)
+		file.Close()
+		
+		if err != nil {
+			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
+			continue
+		}
+
+		mimeType := header.Header.Get("Content-Type")
+		if mimeType == "" || mimeType == "application/octet-stream" {
+			mimeType = "application/octet-stream"
+		}
+
+		binaryRecord := &entity.BinaryFile{
+			ReferensiID: referensiID,
+			Module:      module,
+			Directory:   directory,
+			FileName:    header.Filename,
+			Path:        relPath,
+			Size:        size,
+			MimeType:    mimeType,
+			Checksum:    checksum,
+			Flag:        flagVal,
+			CreateDate:  time.Now(),
+		}
+
+		binID, err := h.binaryRepo.Insert(r.Context(), binaryRecord)
+		if err != nil {
+			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
+			continue
+		}
+
+		results = append(results, FileResult{
+			FileName: header.Filename,
+			BinID:    binID,
+			Path:     relPath,
+			URL:      fmt.Sprintf("/api/v1/%%s/%%d", module, binID),
+		})
+	}
+
+	h.writeJSON(w, http.StatusOK, APIResponse{
+		Success: true,
+		Message: fmt.Sprintf("Processed %%d files", len(results)),
+		Data:    results,
+	})
+}
+
