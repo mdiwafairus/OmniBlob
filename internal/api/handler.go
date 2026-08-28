@@ -65,7 +65,7 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, resp APIResponse)
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, APIResponse{
 		Success: true,
-		Message: "pwni-file-sync service is healthy and running",
+		Message: "omniBlob service is healthy and running",
 		Data: map[string]interface{}{
 			"status":    "UP",
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
@@ -301,6 +301,7 @@ func (h *Handler) ServeFileByRef(w http.ResponseWriter, r *http.Request) {
 	r.URL.Path = fmt.Sprintf("/api/v1/files/%d", target.BinID)
 	h.ServeFileByID(w, r)
 }
+
 // BulkUpload handles multiple file uploads in a single request.
 func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -329,11 +330,15 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	module := strings.TrimSpace(r.FormValue("module"))
-	if module == "" { module = "general" }
+	if module == "" {
+		module = "general"
+	}
 	referensiID := strings.TrimSpace(r.FormValue("referensi_id"))
 	directory := strings.TrimSpace(r.FormValue("directory"))
 	flagVal := strings.TrimSpace(r.FormValue("flag"))
-	if flagVal == "" { flagVal = "1" }
+	if flagVal == "" {
+		flagVal = "1"
+	}
 
 	type FileResult struct {
 		FileName string `json:"file_name"`
@@ -350,10 +355,10 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
 			continue
 		}
-		
+
 		relPath, checksum, size, err := h.storageRepo.Save(r.Context(), module, "", module, directory, referensiID, 0, header.Filename, file)
 		file.Close()
-		
+
 		if err != nil {
 			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
 			continue
@@ -398,3 +403,32 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) < 4 {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "Missing file ID in URL path"})
+		return
+	}
+
+	idStr := pathParts[3]
+	var fileMeta *entity.BinaryFile
+	binID, err := strconv.ParseInt(idStr, 10, 64)
+	if err == nil {
+		fileMeta, err = h.binaryRepo.GetByID(r.Context(), binID)
+	} else {
+		fileMeta, err = h.binaryRepo.GetByFileName(r.Context(), idStr)
+	}
+
+	if err != nil || fileMeta == nil {
+		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found in database index"})
+		return
+	}
+
+	// Delete from storage
+	err = h.storageRepo.Delete(r.Context(), fileMeta.Path)
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("Failed to delete physical file, might already be deleted or missing")
+	}
+
+	h.writeJSON(w, http.StatusOK, APIResponse{Success: true, Message: "File deleted successfully"})
+}

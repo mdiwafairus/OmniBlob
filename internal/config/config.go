@@ -138,6 +138,12 @@ func LoadConfig(path string) (*Config, error) {
 	if apiPass := os.Getenv("API_PASS"); apiPass != "" {
 		cfg.Server.ApiPass = apiPass
 	}
+	if migrationEnabled := os.Getenv("MIGRATION_ENABLED"); migrationEnabled != "" {
+		if b, err := strconv.ParseBool(migrationEnabled); err == nil {
+			cfg.Migration.Enabled = b
+		}
+	}
 
 	return &cfg, nil
 }
+

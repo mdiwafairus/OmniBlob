@@ -37,7 +37,11 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Ha
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/files/") {
-			h.ServeFileByID(w, r)
+			if r.Method == http.MethodDelete {
+				h.DeleteFile(w, r)
+			} else {
+				h.ServeFileByID(w, r)
+			}
 			return
 		}
 		http.NotFound(w, r)
