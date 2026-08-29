@@ -7,6 +7,7 @@ toolchain go1.24.2
 require (
 	github.com/jackc/pgx/v4 v4.15.0
 	github.com/rs/zerolog v1.35.1
+	golang.org/x/sys v0.29.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -23,6 +24,5 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
-	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 )

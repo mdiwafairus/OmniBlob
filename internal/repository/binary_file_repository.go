@@ -208,3 +208,139 @@ func (r *binaryFileRepository) UpdatePathAndStatus(ctx context.Context, binID in
 	}
 	return nil
 }
+
+func (r *binaryFileRepository) GetMigrationStats(ctx context.Context) (*entity.MigrationStats, error) {
+	const query = `
+		SELECT 
+			COUNT(*) as total_files,
+			SUM(CASE WHEN flag = 'M' THEN 1 ELSE 0 END) as migrated_files,
+			COALESCE(SUM(CASE WHEN flag = 'M' THEN size ELSE 0 END), 0) as total_migrated_bytes
+		FROM binary_file
+	`
+	var stats entity.MigrationStats
+	err := r.db.QueryRow(ctx, query).Scan(&stats.TotalFiles, &stats.MigratedFiles, &stats.TotalMigratedBytes)
+	if err != nil {
+		return nil, fmt.Errorf("GetMigrationStats: %w", err)
+	}
+	return &stats, nil
+}
+
+func (r *binaryFileRepository) GetExtensionStats(ctx context.Context) ([]entity.ExtensionStat, error) {
+	const query = `
+		SELECT 
+			LOWER(SUBSTRING(file_name FROM '\.([^\.]+)$')) as extension,
+			COUNT(*) as count,
+			COALESCE(SUM(size), 0) as size_bytes
+		FROM binary_file
+		WHERE file_name LIKE '%.%'
+		GROUP BY extension
+		ORDER BY size_bytes DESC
+		LIMIT 50
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("GetExtensionStats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []entity.ExtensionStat
+	for rows.Next() {
+		var stat entity.ExtensionStat
+		if err := rows.Scan(&stat.Extension, &stat.Count, &stat.SizeBytes); err != nil {
+			return nil, fmt.Errorf("scan extension stat: %w", err)
+		}
+		stats = append(stats, stat)
+	}
+	return stats, nil
+}
+
+func (r *binaryFileRepository) GetTopLargeFiles(ctx context.Context, limit int) ([]entity.LargeFile, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	const query = `
+		SELECT 
+			bin_id,
+			file_name,
+			COALESCE(path, '') as path,
+			COALESCE(size, 0) as size_bytes,
+			COALESCE(LOWER(SUBSTRING(file_name FROM '\.([^\.]+)$')), '') as extension
+		FROM binary_file
+		ORDER BY size DESC
+		LIMIT $1
+	`
+	rows, err := r.db.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("GetTopLargeFiles: %w", err)
+	}
+	defer rows.Close()
+
+	var files []entity.LargeFile
+	for rows.Next() {
+		var f entity.LargeFile
+		if err := rows.Scan(&f.BinID, &f.FileName, &f.Path, &f.SizeBytes, &f.Extension); err != nil {
+			return nil, fmt.Errorf("scan large file: %w", err)
+		}
+		files = append(files, f)
+	}
+	return files, nil
+}
+
+func (r *binaryFileRepository) GetDataQualityStats(ctx context.Context) (*entity.DataQualityStats, error) {
+	const query = `
+		WITH DuplicateHashes AS (
+			SELECT 
+				checksum, 
+				COUNT(*) as count, 
+				MAX(size) as file_size, 
+				MAX(file_name) as example_name
+			FROM binary_file
+			WHERE checksum != '' AND checksum IS NOT NULL
+			GROUP BY checksum
+			HAVING COUNT(*) > 1
+		)
+		SELECT 
+			checksum, 
+			count, 
+			file_size,
+			(count - 1) * file_size as wasted_bytes,
+			example_name
+		FROM DuplicateHashes
+		ORDER BY wasted_bytes DESC
+		LIMIT 100
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("GetDataQualityStats groups: %w", err)
+	}
+	defer rows.Close()
+
+	var stats entity.DataQualityStats
+	for rows.Next() {
+		var g entity.DuplicateGroup
+		if err := rows.Scan(&g.Checksum, &g.Count, &g.SizeBytes, &g.WastedBytes, &g.ExampleName); err != nil {
+			return nil, fmt.Errorf("scan duplicate group: %w", err)
+		}
+		stats.DuplicateGroups = append(stats.DuplicateGroups, g)
+	}
+	
+	const totalQuery = `
+		WITH DuplicateHashes AS (
+			SELECT COUNT(*) as count, MAX(size) as file_size
+			FROM binary_file
+			WHERE checksum != '' AND checksum IS NOT NULL
+			GROUP BY checksum
+			HAVING COUNT(*) > 1
+		)
+		SELECT 
+			COALESCE(SUM(count - 1), 0) as total_duplicates,
+			COALESCE(SUM((count - 1) * file_size), 0) as total_wasted
+		FROM DuplicateHashes
+	`
+	err = r.db.QueryRow(ctx, totalQuery).Scan(&stats.TotalDuplicateFiles, &stats.TotalWastedBytes)
+	if err != nil {
+		return nil, fmt.Errorf("GetDataQualityStats totals: %w", err)
+	}
+
+	return &stats, nil
+}

@@ -10,11 +10,23 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Handler {
+func NewRouter(h *Handler, dashboardHandler *DashboardHandler, cfg *config.ServerConfig, log zerolog.Logger) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health check (Public)
 	mux.HandleFunc("/health", h.HealthCheck)
+
+	// Dashboard Routes (Assuming this is an internal admin route, but keeping it open for MVP)
+	mux.HandleFunc("/api/v1/dashboard/summary", dashboardHandler.GetSummary)
+	mux.HandleFunc("/api/v1/dashboard/analytics", dashboardHandler.GetAnalytics)
+	mux.HandleFunc("/api/v1/dashboard/quality", dashboardHandler.GetQuality)
+
+	// In a real scenario you would use go:embed here by passing the embedded FS 
+	// from the main package or a separate UI package.
+	// For now, we will serve the dist folder directly from the filesystem for development.
+	fs := http.FileServer(http.Dir("./website/workspace/dist"))
+	mux.Handle("/dashboard", http.StripPrefix("/dashboard", fs))
+	mux.Handle("/assets/", fs) // Vite puts assets in /assets/
 
 	// API Routes (Upload is Protected with Per-App Auth)
 	uploadHandler := AppAuthMiddleware(cfg, log, h.Upload)

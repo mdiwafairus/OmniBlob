@@ -13,6 +13,10 @@ type BinaryFileRepository interface {
 	GetPendingFiles(ctx context.Context, lastBinID int64, limit int) ([]entity.BinaryFile, error)
 	Insert(ctx context.Context, file *entity.BinaryFile) (int64, error)
 	UpdatePathAndStatus(ctx context.Context, binID int64, path string, checksum string, size int64, flag string) error
+	GetMigrationStats(ctx context.Context) (*entity.MigrationStats, error)
+	GetExtensionStats(ctx context.Context) ([]entity.ExtensionStat, error)
+	GetTopLargeFiles(ctx context.Context, limit int) ([]entity.LargeFile, error)
+	GetDataQualityStats(ctx context.Context) (*entity.DataQualityStats, error)
 }
 
 type LogRepository interface {
