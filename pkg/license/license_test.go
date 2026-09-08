@@ -14,15 +14,14 @@ func TestLicenseGenerationAndVerification(t *testing.T) {
 
 	now := time.Now().Truncate(time.Second) // JSON marshal/unmarshal handles timestamps slightly differently with nano precision usually, so truncate
 	payload := Payload{
-		KeyID:               "key-001",
-		LicenseID:           "lic-123",
-		CustomerID:          "cust-456",
-		DeploymentID:        "dep-789",
-		HardwareFingerprint: "hw-fingerprint-abc",
-		IssuedAt:            now,
-		NotBefore:           now.Add(-1 * time.Hour),
-		ExpiresAt:           now.Add(24 * time.Hour),
-		GracePeriodDays:     7,
+		KeyID:           "key-001",
+		LicenseID:       "lic-123",
+		CustomerID:      "cust-456",
+		DeploymentID:    "dep-789",
+		IssuedAt:        now,
+		NotBefore:       now.Add(-1 * time.Hour),
+		ExpiresAt:       now.Add(24 * time.Hour),
+		GracePeriodDays: 7,
 		Entitlements: Entitlements{
 			Features: []string{"pro", "api"},
 			Quotas: map[string]int{

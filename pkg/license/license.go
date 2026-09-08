@@ -15,7 +15,6 @@ var (
 	ErrInvalidSignature = errors.New("invalid signature")
 	ErrLicenseExpired   = errors.New("license expired")
 	ErrLicenseNotActive = errors.New("license not yet active")
-	ErrInvalidHardware  = errors.New("hardware fingerprint mismatch")
 	ErrClockTampered    = errors.New("system clock tampering detected")
 )
 
@@ -35,16 +34,15 @@ type Entitlements struct {
 }
 
 type Payload struct {
-	KeyID               string       `json:"key_id"`
-	LicenseID           string       `json:"license_id"`
-	CustomerID          string       `json:"customer_id"`
-	DeploymentID        string       `json:"deployment_id"`
-	HardwareFingerprint string       `json:"hardware_fingerprint"`
-	IssuedAt            time.Time    `json:"issued_at"`
-	NotBefore           time.Time    `json:"not_before"`
-	ExpiresAt           time.Time    `json:"expires_at"`
-	GracePeriodDays     int          `json:"grace_period_days"`
-	Entitlements        Entitlements `json:"entitlements"`
+	KeyID           string       `json:"key_id"`
+	LicenseID       string       `json:"license_id"`
+	CustomerID      string       `json:"customer_id"`
+	DeploymentID    string       `json:"deployment_id"`
+	IssuedAt        time.Time    `json:"issued_at"`
+	NotBefore       time.Time    `json:"not_before"`
+	ExpiresAt       time.Time    `json:"expires_at"`
+	GracePeriodDays int          `json:"grace_period_days"`
+	Entitlements    Entitlements `json:"entitlements"`
 }
 
 type License struct {

@@ -37,15 +37,14 @@ func main() {
 	// In a real app, this payload would be populated from user input or a DB.
 	now := time.Now().Truncate(time.Second)
 	payload := license.Payload{
-		KeyID:               "master-key-01",
-		LicenseID:           "lic-001",
-		CustomerID:          "cust-omni-01",
-		DeploymentID:        "dep-cloud-01",
-		HardwareFingerprint: "hw-fingerprint-example",
-		IssuedAt:            now,
-		NotBefore:           now,
-		ExpiresAt:           now.AddDate(1, 0, 0), // 1 year validity
-		GracePeriodDays:     14,
+		KeyID:           "master-key-01",
+		LicenseID:       "lic-001",
+		CustomerID:      "cust-omni-01",
+		DeploymentID:    "dep-cloud-01",
+		IssuedAt:        now,
+		NotBefore:       now,
+		ExpiresAt:       now.AddDate(1, 0, 0), // 1 year validity
+		GracePeriodDays: 14,
 		Entitlements: license.Entitlements{
 			Features: []string{"advanced_analytics", "sso"},
 			Quotas: map[string]int{
