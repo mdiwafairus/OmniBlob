@@ -58,25 +58,31 @@ func TestLicenseStatus(t *testing.T) {
 	lic := &License{Payload: payload}
 
 	// Valid status
-	if status := lic.CheckStatus(now); status != StatusValid {
+	if status := lic.CheckStatus(now, time.Time{}); status != StatusValid {
 		t.Errorf("Expected StatusValid, got %v", status)
 	}
 
 	// Grace period status
 	graceTime := now.Add(24 * time.Hour * 3) // +3 days, still within 5 days grace period
-	if status := lic.CheckStatus(graceTime); status != StatusGracePeriod {
+	if status := lic.CheckStatus(graceTime, time.Time{}); status != StatusGracePeriod {
 		t.Errorf("Expected StatusGracePeriod, got %v", status)
 	}
 
 	// Expired status (past grace period)
 	expiredTime := now.Add(24 * time.Hour * 6) // +6 days, past 5 days grace period
-	if status := lic.CheckStatus(expiredTime); status != StatusExpired {
+	if status := lic.CheckStatus(expiredTime, time.Time{}); status != StatusExpired {
 		t.Errorf("Expected StatusExpired, got %v", status)
 	}
 
 	// Expired status (before NotBefore)
 	earlyTime := now.Add(-3 * time.Hour) // Before NotBefore
-	if status := lic.CheckStatus(earlyTime); status != StatusExpired {
+	if status := lic.CheckStatus(earlyTime, time.Time{}); status != StatusExpired {
 		t.Errorf("Expected StatusExpired for early check, got %v", status)
+	}
+
+	// Clock tampered status
+	lastSeen := now.Add(1 * time.Hour)
+	if status := lic.CheckStatus(now, lastSeen); status != StatusClockTampered {
+		t.Errorf("Expected StatusClockTampered, got %v", status)
 	}
 }

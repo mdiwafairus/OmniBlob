@@ -16,14 +16,16 @@ var (
 	ErrLicenseExpired   = errors.New("license expired")
 	ErrLicenseNotActive = errors.New("license not yet active")
 	ErrInvalidHardware  = errors.New("hardware fingerprint mismatch")
+	ErrClockTampered    = errors.New("system clock tampering detected")
 )
 
 type LicenseStatus string
 
 const (
-	StatusValid       LicenseStatus = "VALID"
-	StatusGracePeriod LicenseStatus = "GRACE_PERIOD"
-	StatusExpired     LicenseStatus = "EXPIRED"
+	StatusValid         LicenseStatus = "VALID"
+	StatusGracePeriod   LicenseStatus = "GRACE_PERIOD"
+	StatusExpired       LicenseStatus = "EXPIRED"
+	StatusClockTampered LicenseStatus = "CLOCK_TAMPERED"
 )
 
 type Entitlements struct {
@@ -83,7 +85,12 @@ func (l *License) VerifySignature(publicKey ed25519.PublicKey) error {
 	return nil
 }
 
-func (l *License) CheckStatus(currentTime time.Time) LicenseStatus {
+func (l *License) CheckStatus(currentTime, lastSeenTime time.Time) LicenseStatus {
+	// Anti-tampering: Check if the system clock has been rewound
+	if !lastSeenTime.IsZero() && currentTime.Before(lastSeenTime) {
+		return StatusClockTampered
+	}
+
 	if currentTime.Before(l.Payload.NotBefore) {
 		// Even if not active yet, let's treat it as expired or a separate state.
 		// Standard status state machine: if before NotBefore, we'll say EXPIRED (STOP).

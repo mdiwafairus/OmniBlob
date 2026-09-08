@@ -48,8 +48,26 @@ func main() {
 	}
 	fmt.Println("Signature is VALID.")
 
+	now := time.Now()
+	watermarkFile := "license_watermark.json"
+
+	// Fetch last seen time before updating
+	lastSeen, err := license.GetWatermark(watermarkFile)
+	if err != nil {
+		fmt.Printf("Warning: could not read watermark: %v\n", err)
+	}
+
+	// Try to update watermark. If this returns ErrClockTampered, the user has rewound the clock.
+	err = license.UpdateWatermark(watermarkFile, now)
+	if err == license.ErrClockTampered {
+		fmt.Println("CRITICAL ERROR: System clock has been manipulated backwards (time rewound)!")
+		lastSeen = time.Now().Add(1 * time.Hour) // Force CheckStatus to return tampered
+	} else if err != nil {
+		fmt.Printf("Warning: could not update watermark: %v\n", err)
+	}
+
 	// Check status
-	status := lic.CheckStatus(time.Now())
+	status := lic.CheckStatus(now, lastSeen)
 	fmt.Printf("License Status: %s\n", status)
 
 	switch status {
@@ -59,6 +77,8 @@ func main() {
 		fmt.Println("System State: WARNING - License is expired but within grace period.")
 	case license.StatusExpired:
 		fmt.Println("System State: STOP - License is expired or not active.")
+	case license.StatusClockTampered:
+		fmt.Println("System State: STOP - License is locked due to clock tampering detected.")
 	}
 
 	fmt.Printf("\nLicense Details:\n")
