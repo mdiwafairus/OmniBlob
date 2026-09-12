@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v4/pgxpool"
 	"pwni-file-sync/internal/config"
+	"pwni-file-sync/internal/logger"
 
 	"github.com/rs/zerolog"
 )
@@ -22,6 +24,7 @@ type ClientInfo struct {
 	Name           string
 	User           string
 	AllowedModules []string
+	WhitelistIPs   []string
 }
 
 // GetClientFromContext retrieves authenticated application info from HTTP request context.
@@ -33,7 +36,9 @@ func GetClientFromContext(ctx context.Context) *ClientInfo {
 }
 
 // AppAuthMiddleware provides per-application authentication.
-func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, next http.HandlerFunc) http.HandlerFunc {
+func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, dbPool *pgxpool.Pool, next http.HandlerFunc) http.HandlerFunc {
+	suspectLogger := logger.NewSuspectLogger()
+
 	// Build fast lookup maps from config
 	keyToClient := make(map[string]*ClientInfo)
 	userPassToClient := make(map[string]*ClientInfo)
@@ -44,6 +49,7 @@ func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, next http.H
 			Name:           c.Name,
 			User:           c.User,
 			AllowedModules: c.AllowedModules,
+			WhitelistIPs:   c.WhitelistIPs,
 		}
 		if c.ApiKey != "" {
 			keyToClient[c.ApiKey] = info
@@ -98,12 +104,40 @@ func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, next http.H
 			}
 		}
 
+		// Extract real IP
+		clientIP := r.Header.Get("X-Real-IP")
+		if clientIP == "" {
+			clientIP = r.Header.Get("X-Forwarded-For")
+		}
+		if clientIP == "" {
+			clientIP = strings.Split(r.RemoteAddr, ":")[0]
+		}
+
+		// Check if IP is globally blocked
+		if IsIPBlocked(clientIP) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Connection", "close")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Too Many Requests: Your IP has been temporarily blocked due to multiple suspicious attempts",
+			})
+			return
+		}
+
 		// If no client credentials matched -> reject with 401 Unauthorized
 		if matchedClient == nil {
-			log.Warn().
+			justBanned := RecordFailedAttempt(clientIP, "Multiple failed authentication attempts", dbPool)
+			
+			logMsg := "Rejected unauthenticated request to protected endpoint"
+			if justBanned {
+				logMsg = "IP temporarily blocked due to multiple failed authentication attempts"
+			}
+			
+			suspectLogger.Warn().
 				Str("path", r.URL.Path).
-				Str("remote_ip", r.RemoteAddr).
-				Msg("Rejected unauthenticated request to protected endpoint")
+				Str("remote_ip", clientIP).
+				Msg(logMsg)
 
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.Header().Set("Connection", "close")
@@ -114,6 +148,43 @@ func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, next http.H
 				"error":   "Unauthorized: Invalid application credentials or API Key",
 			})
 			return
+		}
+
+		// IP Whitelist Check
+		if len(matchedClient.WhitelistIPs) > 0 {
+			ipAllowed := false
+			for _, allowedIP := range matchedClient.WhitelistIPs {
+				if clientIP == allowedIP {
+					ipAllowed = true
+					break
+				}
+			}
+
+			if !ipAllowed {
+				justBanned := RecordFailedAttempt(clientIP, "Multiple whitelist bypass attempts", dbPool)
+
+				logMsg := "Access denied: IP not in whitelist"
+				if justBanned {
+					logMsg = "IP temporarily blocked due to multiple whitelist bypass attempts"
+				}
+
+				suspectLog := suspectLogger.With().
+					Str("client", matchedClient.Name).
+					Str("path", r.URL.Path).
+					Str("remote_ip", clientIP).
+					Logger()
+
+				suspectLog.Warn().Msg(logMsg)
+
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.Header().Set("Connection", "close")
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": false,
+					"error":   "Forbidden: Your IP is not whitelisted for this application",
+				})
+				return
+			}
 		}
 
 		// Inject authenticated client info into request context

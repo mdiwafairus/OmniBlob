@@ -5,20 +5,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v4/pgxpool"
 	"pwni-file-sync/internal/config"
-
 	"github.com/rs/zerolog"
 )
 
-func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Handler {
+func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger, dbPool *pgxpool.Pool) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health check (Public)
 	mux.HandleFunc("/health", h.HealthCheck)
 
 	// API Routes (Upload is Protected with Per-App Auth)
-	uploadHandler := AppAuthMiddleware(cfg, log, h.Upload)
-	bulkUploadHandler := AppAuthMiddleware(cfg, log, h.BulkUpload)
+	uploadHandler := AppAuthMiddleware(cfg, log, dbPool, h.Upload)
+	bulkUploadHandler := AppAuthMiddleware(cfg, log, dbPool, h.BulkUpload)
 	
 	mux.HandleFunc("/api/v1/files/upload", uploadHandler)
 	mux.HandleFunc("/api/v1/files/bulk-upload", bulkUploadHandler)
