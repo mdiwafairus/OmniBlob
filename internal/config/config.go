@@ -10,10 +10,11 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig    `yaml:"server" mapstructure:"server"`
-	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
-	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
-	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
+	Server         ServerConfig         `yaml:"server" mapstructure:"server"`
+	Storage        StorageConfig        `yaml:"storage" mapstructure:"storage"`
+	Migration      MigrationConfig      `yaml:"migration" mapstructure:"migration"`
+	Reconciliation ReconciliationConfig `yaml:"reconciliation" mapstructure:"reconciliation"`
+	Database       DatabaseConfig       `yaml:"database" mapstructure:"database"`
 }
 
 type ClientConfig struct {
@@ -22,18 +23,21 @@ type ClientConfig struct {
 	User           string   `yaml:"user" mapstructure:"user"`
 	Password       string   `yaml:"password" mapstructure:"password"`
 	AllowedModules []string `yaml:"allowed_modules" mapstructure:"allowed_modules"`
+	WhitelistIPs   []string `yaml:"whitelist_ips" mapstructure:"whitelist_ips"`
 }
 
 type ServerConfig struct {
-	Host            string         `yaml:"host" mapstructure:"host"`
-	Port            int            `yaml:"port" mapstructure:"port"`
-	ReadTimeoutSec  int            `yaml:"read_timeout_sec" mapstructure:"read_timeout_sec"`
-	WriteTimeoutSec int            `yaml:"write_timeout_sec" mapstructure:"write_timeout_sec"`
-	MaxUploadSizeMB int            `yaml:"max_upload_size_mb" mapstructure:"max_upload_size_mb"`
-	ApiKey          string         `yaml:"api_key" mapstructure:"api_key"`
-	ApiUser         string         `yaml:"api_user" mapstructure:"api_user"`
-	ApiPass         string         `yaml:"api_pass" mapstructure:"api_pass"`
-	Clients         []ClientConfig `yaml:"clients" mapstructure:"clients"`
+	Host              string         `yaml:"host" mapstructure:"host"`
+	Port              int            `yaml:"port" mapstructure:"port"`
+	ReadTimeoutSec    int            `yaml:"read_timeout_sec" mapstructure:"read_timeout_sec"`
+	WriteTimeoutSec   int            `yaml:"write_timeout_sec" mapstructure:"write_timeout_sec"`
+	MaxUploadSizeMB   int            `yaml:"max_upload_size_mb" mapstructure:"max_upload_size_mb"`
+	AllowedExtensions []string       `yaml:"allowed_extensions" mapstructure:"allowed_extensions"`
+	RateLimitRPM      int            `yaml:"rate_limit_rpm" mapstructure:"rate_limit_rpm"` // Requests Per Minute
+	ApiKey            string         `yaml:"api_key" mapstructure:"api_key"`
+	ApiUser           string         `yaml:"api_user" mapstructure:"api_user"`
+	ApiPass           string         `yaml:"api_pass" mapstructure:"api_pass"`
+	Clients           []ClientConfig `yaml:"clients" mapstructure:"clients"`
 }
 
 type StorageConfig struct {
@@ -47,6 +51,12 @@ type MigrationConfig struct {
 	BatchSize   int  `yaml:"batch_size" mapstructure:"batch_size"`
 	IntervalSec int  `yaml:"interval_sec" mapstructure:"interval_sec"`
 	WorkerCount int  `yaml:"worker_count" mapstructure:"worker_count"`
+}
+
+type ReconciliationConfig struct {
+	Enabled     bool `yaml:"enabled" mapstructure:"enabled"`
+	BatchSize   int  `yaml:"batch_size" mapstructure:"batch_size"`
+	IntervalSec int  `yaml:"interval_sec" mapstructure:"interval_sec"`
 }
 
 type DatabaseConfig struct {
@@ -141,6 +151,11 @@ func LoadConfig(path string) (*Config, error) {
 	if migrationEnabled := os.Getenv("MIGRATION_ENABLED"); migrationEnabled != "" {
 		if b, err := strconv.ParseBool(migrationEnabled); err == nil {
 			cfg.Migration.Enabled = b
+		}
+	}
+	if reconciliationEnabled := os.Getenv("RECONCILIATION_ENABLED"); reconciliationEnabled != "" {
+		if b, err := strconv.ParseBool(reconciliationEnabled); err == nil {
+			cfg.Reconciliation.Enabled = b
 		}
 	}
 

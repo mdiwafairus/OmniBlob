@@ -60,6 +60,10 @@ func main() {
 	migrationService := service.NewMigrationService(&cfg.Migration, storageService, binaryRepo, logRepo, log)
 	go migrationService.StartBackgroundMigration(ctx)
 
+	// Start Background Reconciliation Worker (checking DB checksum vs physical file)
+	reconciliationService := service.NewReconciliationService(&cfg.Reconciliation, &cfg.Storage, binaryRepo, log)
+	go reconciliationService.StartBackgroundReconciliation(ctx)
+
 	// 6. Initialize HTTP API Server
 	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Server.AllowedExtensions)
 	router := api.NewRouter(handler, &cfg.Server, log, dbPool)
@@ -86,6 +90,7 @@ func main() {
 	// Cancel background workers
 	cancel()
 	migrationService.Stop()
+	reconciliationService.Stop()
 
 	// Graceful HTTP shutdown with 10s timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)

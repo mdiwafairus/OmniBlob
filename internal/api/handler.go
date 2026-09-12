@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -22,6 +23,7 @@ type Handler struct {
 	binaryRepo  repository.BinaryFileRepository
 	logger      zerolog.Logger
 	maxUploadMB int64
+	allowedExts []string
 }
 
 func NewHandler(
@@ -29,16 +31,74 @@ func NewHandler(
 	binaryRepo repository.BinaryFileRepository,
 	logger zerolog.Logger,
 	maxUploadMB int,
+	allowedExts []string,
 ) *Handler {
 	if maxUploadMB <= 0 {
 		maxUploadMB = 100
+	}
+	exts := make([]string, 0, len(allowedExts))
+	for _, ext := range allowedExts {
+		exts = append(exts, strings.ToLower(strings.TrimSpace(ext)))
 	}
 	return &Handler{
 		storageRepo: storageRepo,
 		binaryRepo:  binaryRepo,
 		logger:      logger,
 		maxUploadMB: int64(maxUploadMB),
+		allowedExts: exts,
 	}
+}
+
+// isExtensionAllowed checks if a filename's extension is permitted
+func (h *Handler) isExtensionAllowed(filename string) bool {
+	if len(h.allowedExts) == 0 {
+		return true // No restriction if list is empty
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	for _, a := range h.allowedExts {
+		if ext == a {
+			return true
+		}
+	}
+	return false
+}
+
+// isMimeMatchSecure validates if the physically detected MIME type matches the file extension claim
+// and prevents malicious disguises (e.g. PHP/Exe renamed to PDF)
+func (h *Handler) isMimeMatchSecure(filename string, detectedMime string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	mimeBase := strings.Split(detectedMime, ";")[0]
+
+	// Strictly block inherently dangerous MIME types regardless of extension (unless specifically intended)
+	if mimeBase == "application/x-executable" || mimeBase == "application/x-mach-binary" || mimeBase == "application/x-elf" || mimeBase == "application/x-sh" || mimeBase == "text/x-php" {
+		return false
+	}
+
+	// For specific extensions, ensure the detected MIME makes sense
+	switch ext {
+	case ".pdf":
+		return mimeBase == "application/pdf"
+	case ".jpg", ".jpeg":
+		return mimeBase == "image/jpeg"
+	case ".png":
+		return mimeBase == "image/png"
+	case ".gif":
+		return mimeBase == "image/gif"
+	case ".docx", ".xlsx", ".pptx", ".zip":
+		return mimeBase == "application/zip"
+	case ".html", ".htm":
+		return mimeBase == "text/html"
+	case ".txt", ".csv":
+		return strings.HasPrefix(mimeBase, "text/")
+	}
+
+	// If extension isn't HTML, ensure detected MIME isn't HTML/JS (to prevent XSS payloads disguised as images/docs)
+	if mimeBase == "text/html" || mimeBase == "text/javascript" {
+		return false
+	}
+
+	// For extensions not explicitly mapped above, allow by default if it passes the danger checks
+	return true
 }
 
 type APIResponse struct {
@@ -139,6 +199,39 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	customFileName := strings.TrimSpace(r.FormValue("file_name"))
 	if customFileName == "" {
 		customFileName = header.Filename
+	}
+
+	if !h.isExtensionAllowed(customFileName) {
+		h.writeJSON(w, http.StatusUnsupportedMediaType, APIResponse{
+			Success: false,
+			Error:   fmt.Sprintf("File extension not allowed for file: %s", customFileName),
+		})
+		return
+	}
+
+	// Read first 512 bytes for MIME detection (magic bytes)
+	buff := make([]byte, 512)
+	if _, err := file.Read(buff); err != nil && err != io.EOF {
+		h.writeJSON(w, http.StatusInternalServerError, APIResponse{Success: false, Error: "Failed to read file for inspection"})
+		return
+	}
+	detectedMime := http.DetectContentType(buff)
+
+	// Reset file pointer back to start
+	if seeker, ok := file.(io.Seeker); ok {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			h.writeJSON(w, http.StatusInternalServerError, APIResponse{Success: false, Error: "Failed to reset file pointer"})
+			return
+		}
+	}
+
+	if !h.isMimeMatchSecure(customFileName, detectedMime) {
+		h.logger.Warn().Str("filename", customFileName).Str("detected_mime", detectedMime).Msg("Security check failed: File content does not match extension or is dangerous")
+		h.writeJSON(w, http.StatusUnsupportedMediaType, APIResponse{
+			Success: false,
+			Error:   "Security check failed: File content does not match extension or contains dangerous data",
+		})
+		return
 	}
 
 	// 1. Stream file directly to storage & compute checksum
@@ -350,12 +443,38 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	var results []FileResult
 
 	for _, header := range files {
+		if !h.isExtensionAllowed(header.Filename) {
+			results = append(results, FileResult{FileName: header.Filename, Error: "File extension not allowed"})
+			continue
+		}
+
 		file, err := header.Open()
 		if err != nil {
 			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
 			continue
 		}
 
+		buff := make([]byte, 512)
+		if _, err := file.Read(buff); err != nil && err != io.EOF {
+			results = append(results, FileResult{FileName: header.Filename, Error: "Failed to read file for inspection"})
+			file.Close()
+			continue
+		}
+		detectedMime := http.DetectContentType(buff)
+		if seeker, ok := file.(io.Seeker); ok {
+			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+				results = append(results, FileResult{FileName: header.Filename, Error: "Failed to reset file pointer"})
+				file.Close()
+				continue
+			}
+		}
+
+		if !h.isMimeMatchSecure(header.Filename, detectedMime) {
+			h.logger.Warn().Str("filename", header.Filename).Str("detected_mime", detectedMime).Msg("Security check failed in bulk upload")
+			results = append(results, FileResult{FileName: header.Filename, Error: "Security check failed: File content does not match extension or is dangerous"})
+			file.Close()
+			continue
+		}
 		relPath, checksum, size, err := h.storageRepo.Save(r.Context(), module, "", module, directory, referensiID, 0, header.Filename, file)
 		file.Close()
 
@@ -392,13 +511,13 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			FileName: header.Filename,
 			BinID:    binID,
 			Path:     relPath,
-			URL:      fmt.Sprintf("/api/v1/%%s/%%d", module, binID),
+			URL:      fmt.Sprintf("/api/v1/%s/%d", module, binID),
 		})
 	}
 
 	h.writeJSON(w, http.StatusOK, APIResponse{
 		Success: true,
-		Message: fmt.Sprintf("Processed %%d files", len(results)),
+		Message: fmt.Sprintf("Processed %d files", len(results)),
 		Data:    results,
 	})
 }

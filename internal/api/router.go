@@ -49,6 +49,7 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger, dbPool 
 
 	// Wrap with Middlewares
 	var handler http.Handler = mux
+	handler = rateLimitMiddleware(cfg)(handler) // Global DDoS Protection
 	handler = corsMiddleware(handler)
 	handler = loggingMiddleware(handler, log)
 	handler = recoveryMiddleware(handler, log)
