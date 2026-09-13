@@ -14,6 +14,45 @@ import (
 func NewRouter(h *Handler, cfg *config.ServerConfig, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger, log zerolog.Logger) http.Handler {
 	mux := http.NewServeMux()
 
+	// Root Dashboard (Welcome Page)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<title>OmniBlob Storage</title>
+				<style>
+					body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px; background-color: #f8f9fa; color: #333; }
+					.container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+					h1 { color: #0056b3; }
+					.status { display: inline-block; padding: 5px 10px; background: #28a745; color: white; border-radius: 4px; font-weight: bold; font-size: 14px; }
+					code { background: #eee; padding: 2px 6px; border-radius: 4px; }
+				</style>
+			</head>
+			<body>
+				<div class="container">
+					<h1>📦 OmniBlob Storage Node</h1>
+					<p>Status: <span class="status">RUNNING</span></p>
+					<p>Selamat datang! Server Object Storage & Sync Anda sedang berjalan.</p>
+					<hr>
+					<h3>Endpoints Tersedia:</h3>
+					<ul>
+						<li><code>GET /health</code> - Cek kesehatan server & database</li>
+						<li><code>POST /api/v1/files/upload</code> - Upload file</li>
+						<li><code>GET /api/v1/files/view?ref=...</code> - Lihat/Download file</li>
+					</ul>
+					<p><em>Catatan: Karena OmniBlob adalah aplikasi backend (API Server), pengelolaan file utama dilakukan melalui API Client (seperti Postman, cURL, atau Backend Utama Anda).</em></p>
+				</div>
+			</body>
+			</html>
+		`))
+	})
+
 	// Health check (Public)
 	mux.HandleFunc("/health", h.HealthCheck)
 
