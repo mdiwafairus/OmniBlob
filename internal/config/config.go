@@ -38,6 +38,7 @@ type ServerConfig struct {
 }
 
 type SecurityConfig struct {
+	Enabled          bool     `yaml:"enabled" mapstructure:"enabled"`
 	Mode             string   `yaml:"mode" mapstructure:"mode"`
 	AllowedSocketIPs []string `yaml:"allowed_socket_ips" mapstructure:"allowed_socket_ips"`
 	AuthType         string   `yaml:"auth_type" mapstructure:"auth_type"`

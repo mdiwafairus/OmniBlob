@@ -1,10 +1,12 @@
 package api
 
 import (
+	"io/fs"
 	"net/http"
 	"strings"
 	"time"
 
+	"pwni-file-sync/dashboard"
 	"pwni-file-sync/internal/config"
 	"pwni-file-sync/internal/logger"
 
@@ -14,12 +16,38 @@ import (
 func NewRouter(h *Handler, cfg *config.ServerConfig, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger, log zerolog.Logger) http.Handler {
 	mux := http.NewServeMux()
 
-	// Root Dashboard (Welcome Page)
+	// Extract the embedded dashboard files
+	distFS, err := fs.Sub(dashboard.FS, "dist")
+	
+	// Serve Dashboard if built, otherwise fallback to basic status
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
+		// Do not intercept API or Health routes
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/health" {
 			http.NotFound(w, r)
 			return
 		}
+
+		// If distFS is available (embedded), serve it
+		if err == nil {
+			// Check if file exists in the embedded FS
+			filePath := strings.TrimPrefix(r.URL.Path, "/")
+			if filePath == "" {
+				filePath = "index.html"
+			}
+			
+			if _, statErr := fs.Stat(distFS, filePath); statErr == nil {
+				// File exists, serve it
+				http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
+				return
+			}
+			
+			// Fallback to index.html for React Router / SPA
+			r.URL.Path = "/"
+			http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
+			return
+		}
+
+		// Fallback if dashboard is not embedded
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(`
 			<!DOCTYPE html>
@@ -99,6 +127,11 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, secCfg *config.SecurityConf
 
 func auditMiddleware(next http.Handler, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !secCfg.Enabled {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Log if behind_proxy or in general for transparency
 		xff := r.Header.Get("X-Forwarded-For")
 		remoteAddr := r.RemoteAddr

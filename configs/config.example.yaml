@@ -33,6 +33,7 @@ server:
       allowed_modules: ["*"]
 
 security:
+  enabled: true
   mode: "direct_socket" # direct_socket or behind_proxy
   allowed_socket_ips: 
     - "127.0.0.1/32"
