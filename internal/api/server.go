@@ -68,12 +68,14 @@ func (s *Server) Start() error {
 		return fmt.Errorf("failed to listen on %s: %w", s.httpServer.Addr, err)
 	}
 
-	// Wrap with our Whitelisted Listener if in direct_socket mode
-	if s.securityCfg.Mode == "direct_socket" {
+	// Wrap with our Whitelisted Listener if in direct_socket mode and security is enabled
+	if s.securityCfg.Enabled && s.securityCfg.Mode == "direct_socket" {
 		s.logger.Info().Strs("allowed_ips", s.securityCfg.AllowedSocketIPs).Msg("Security Mode: direct_socket (Layer 4 TCP Drop enabled)")
 		ln = NewWhitelistedListener(ln, s.securityCfg, s.auditLogger)
-	} else if s.securityCfg.Mode == "behind_proxy" {
+	} else if s.securityCfg.Enabled && s.securityCfg.Mode == "behind_proxy" {
 		s.logger.Info().Msg("Security Mode: behind_proxy (Trusting Proxy X-Forwarded-For)")
+	} else {
+		s.logger.Warn().Msg("Socket Security is DISABLED. Server is open to all Layer 4 connections.")
 	}
 
 	if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
