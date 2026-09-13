@@ -60,10 +60,17 @@ func main() {
 	migrationService := service.NewMigrationService(&cfg.Migration, storageService, binaryRepo, logRepo, log)
 	go migrationService.StartBackgroundMigration(ctx)
 
+	// 5.5 Initialize Audit Logger
+	auditLogger, err := logger.NewAuditLogger("logs")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize Audit Logger")
+	}
+	defer auditLogger.Close()
+
 	// 6. Initialize HTTP API Server
 	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB)
-	router := api.NewRouter(handler, &cfg.Server, log)
-	httpServer := api.NewServer(&cfg.Server, router, log)
+	router := api.NewRouter(handler, &cfg.Server, &cfg.Security, auditLogger, log)
+	httpServer := api.NewServer(&cfg.Server, &cfg.Security, auditLogger, router, log)
 
 	// Run HTTP Server in a separate goroutine
 	go func() {

@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"pwni-file-sync/internal/config"
+	"pwni-file-sync/internal/logger"
 
 	"github.com/rs/zerolog"
 )
 
-func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Handler {
+func NewRouter(h *Handler, cfg *config.ServerConfig, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger, log zerolog.Logger) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health check (Public)
@@ -49,11 +50,45 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, log zerolog.Logger) http.Ha
 
 	// Wrap with Middlewares
 	var handler http.Handler = mux
+	handler = auditMiddleware(handler, secCfg, auditLogger)
 	handler = corsMiddleware(handler)
 	handler = loggingMiddleware(handler, log)
 	handler = recoveryMiddleware(handler, log)
 
 	return handler
+}
+
+func auditMiddleware(next http.Handler, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Log if behind_proxy or in general for transparency
+		xff := r.Header.Get("X-Forwarded-For")
+		remoteAddr := r.RemoteAddr
+		
+		statusStr := "ignored: not in behind_proxy mode"
+		if secCfg.Mode == "behind_proxy" {
+			statusStr = "trusted"
+		} else if xff != "" {
+			statusStr = "ignored: proxy IP trusted, but XFF format invalid/tampered or direct_socket mode"
+		} else {
+			statusStr = "N/A"
+		}
+		
+		if auditLogger != nil {
+			xffLog := xff
+			if xff == "" {
+				xffLog = "N/A"
+			} else {
+				xffLog = xff + " (" + statusStr + ")"
+			}
+			
+			// We only record initial connection properties here.
+			// True authentication decisions might happen downstream,
+			// but this gives a guaranteed L7 trail for accepted sockets.
+			auditLogger.LogConnection(remoteAddr, xffLog, "L7_ACCEPTED", "Socket IP allowed, processing HTTP")
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

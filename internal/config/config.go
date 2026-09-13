@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server" mapstructure:"server"`
+	Security  SecurityConfig  `yaml:"security" mapstructure:"security"`
 	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
 	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
@@ -34,6 +35,12 @@ type ServerConfig struct {
 	ApiUser         string         `yaml:"api_user" mapstructure:"api_user"`
 	ApiPass         string         `yaml:"api_pass" mapstructure:"api_pass"`
 	Clients         []ClientConfig `yaml:"clients" mapstructure:"clients"`
+}
+
+type SecurityConfig struct {
+	Mode             string   `yaml:"mode" mapstructure:"mode"`
+	AllowedSocketIPs []string `yaml:"allowed_socket_ips" mapstructure:"allowed_socket_ips"`
+	AuthType         string   `yaml:"auth_type" mapstructure:"auth_type"`
 }
 
 type StorageConfig struct {
