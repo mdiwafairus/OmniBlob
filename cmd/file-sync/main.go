@@ -97,7 +97,8 @@ func main() {
 	// 6. Initialize HTTP API Server
 	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB)
 	dashboardHandler := api.NewDashboardHandler(dashboardRepo, &cfg.Server, &cfg.Migration, &cfg.Storage, log)
-	router := api.NewRouter(handler, dashboardHandler, &cfg.Server, &cfg.Security, auditLogger, log)
+	explorerHandler := api.NewExplorerHandler(&cfg.Storage, &cfg.Migration, log)
+	router := api.NewRouter(handler, dashboardHandler, explorerHandler, &cfg.Server, &cfg.Security, auditLogger, log)
 	httpServer := api.NewServer(&cfg.Server, &cfg.Security, auditLogger, router, log)
 
 	// Run HTTP Server in a separate goroutine
@@ -162,40 +163,32 @@ func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logg
 			// Clean path for database storage (use forward slashes universally)
 			relPath = filepath.ToSlash(relPath)
 			filename := filepath.Base(relPath)
+			dir := filepath.Dir(relPath)
+			if dir == "." {
+				dir = ""
+			}
 			
-			// Try to insert (in production we might want to skip if already exists, but for now just insert)
-			// Assuming referensi_id is somewhat unique, we'll just use a gen-ref or something.
-			// Actually, let's just use relPath as referensi_id to avoid duplicates if they run it twice.
-			
-			// We only need basic fields for migration. OmniBlob's background worker only requires `flag != 'M'`.
+			// Try to insert
 			_, err = dbPool.Exec(ctx, 
-				`INSERT INTO binary_file (referensi_id, module, file_name, path, flag) 
-				 VALUES ($1, 'legacy_scan', $2, $3, '1')
-				 ON CONFLICT DO NOTHING`, // Note: Requires unique constraint on referensi_id if we want ON CONFLICT
-				 "auto_"+relPath, filename, relPath)
+				`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag) 
+				 VALUES ($1, 'legacy_scan', $2, $3, $4, '1')
+				 ON CONFLICT DO NOTHING`,
+				 "auto_"+relPath, dir, filename, relPath)
 			
-			// If ON CONFLICT isn't setup, we can just catch the error and ignore or do a quick SELECT first
 			if err != nil {
-				// Let's do a safe insert by checking first
 				var exists bool
 				_ = dbPool.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 LIMIT 1", relPath).Scan(&exists)
 				if !exists {
 					_, err = dbPool.Exec(ctx, 
-						`INSERT INTO binary_file (referensi_id, module, file_name, path, flag) 
-						 VALUES ($1, 'legacy_scan', $2, $3, '1')`,
-						 "auto_"+relPath, filename, relPath)
+						`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag) 
+						 VALUES ($1, 'legacy_scan', $2, $3, $4, '1')`,
+						 "auto_"+relPath, dir, filename, relPath)
 					if err == nil {
 						count++
-						if count%100 == 0 {
-							log.Info().Int("scanned_count", count).Msg("Scanning in progress...")
-						}
 					}
 				}
 			} else {
 				count++
-				if count%100 == 0 {
-					log.Info().Int("scanned_count", count).Msg("Scanning in progress...")
-				}
 			}
 		}
 		return nil
