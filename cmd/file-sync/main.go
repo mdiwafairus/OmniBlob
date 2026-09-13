@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,12 +17,16 @@ import (
 	"pwni-file-sync/internal/repository"
 	"pwni-file-sync/internal/service"
 	"pwni-file-sync/internal/storage"
+
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/rs/zerolog"
 )
 
 func main() {
 	configFlag := flag.String("config", "configs/config.yaml", "Path to configuration file")
 	portFlag := flag.Int("port", 0, "Override server port")
 	maxUploadFlag := flag.Int("max-upload", 0, "Override max upload size in MB")
+	scanLegacy := flag.Bool("scan-legacy", false, "Scan legacy_path and automatically populate the database for migration")
 	flag.Parse()
 
 	log := logger.NewLogger()
@@ -54,6 +59,11 @@ func main() {
 		dbPool.Close()
 	}()
 
+	if *scanLegacy {
+		runLegacyScanner(dbPool, cfg.Storage.LegacyPath, &log)
+		return
+	}
+
 	// 3. Initialize Storage Engine
 	storageService, err := storage.NewStorageService(&cfg.Storage)
 	if err != nil {
@@ -67,6 +77,7 @@ func main() {
 	// 4. Initialize Repositories
 	binaryRepo := repository.NewBinaryFileRepository(dbPool)
 	logRepo := repository.NewLogRepository(dbPool)
+	dashboardRepo := repository.NewDashboardRepository(dbPool)
 
 	// Context for graceful background jobs
 	ctx, cancel := context.WithCancel(context.Background())
@@ -85,7 +96,8 @@ func main() {
 
 	// 6. Initialize HTTP API Server
 	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB)
-	router := api.NewRouter(handler, &cfg.Server, &cfg.Security, auditLogger, log)
+	dashboardHandler := api.NewDashboardHandler(dashboardRepo, &cfg.Server, &cfg.Migration, &cfg.Storage, log)
+	router := api.NewRouter(handler, dashboardHandler, &cfg.Server, &cfg.Security, auditLogger, log)
 	httpServer := api.NewServer(&cfg.Server, &cfg.Security, auditLogger, router, log)
 
 	// Run HTTP Server in a separate goroutine
@@ -124,4 +136,74 @@ func main() {
 	}
 
 	log.Info().Msg("pwni-file-sync service stopped cleanly.")
+}
+
+func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logger) {
+	log.Info().Str("legacy_path", legacyPath).Msg("Starting Auto-Discovery Legacy File Scanner...")
+	
+	if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
+		log.Error().Msg("Legacy path does not exist. Cannot scan.")
+		return
+	}
+
+	ctx := context.Background()
+
+	var count int
+	err := filepath.WalkDir(legacyPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			relPath, err := filepath.Rel(legacyPath, path)
+			if err != nil {
+				return nil
+			}
+
+			// Clean path for database storage (use forward slashes universally)
+			relPath = filepath.ToSlash(relPath)
+			filename := filepath.Base(relPath)
+			
+			// Try to insert (in production we might want to skip if already exists, but for now just insert)
+			// Assuming referensi_id is somewhat unique, we'll just use a gen-ref or something.
+			// Actually, let's just use relPath as referensi_id to avoid duplicates if they run it twice.
+			
+			// We only need basic fields for migration. OmniBlob's background worker only requires `flag != 'M'`.
+			_, err = dbPool.Exec(ctx, 
+				`INSERT INTO binary_file (referensi_id, module, file_name, path, flag) 
+				 VALUES ($1, 'legacy_scan', $2, $3, '1')
+				 ON CONFLICT DO NOTHING`, // Note: Requires unique constraint on referensi_id if we want ON CONFLICT
+				 "auto_"+relPath, filename, relPath)
+			
+			// If ON CONFLICT isn't setup, we can just catch the error and ignore or do a quick SELECT first
+			if err != nil {
+				// Let's do a safe insert by checking first
+				var exists bool
+				_ = dbPool.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 LIMIT 1", relPath).Scan(&exists)
+				if !exists {
+					_, err = dbPool.Exec(ctx, 
+						`INSERT INTO binary_file (referensi_id, module, file_name, path, flag) 
+						 VALUES ($1, 'legacy_scan', $2, $3, '1')`,
+						 "auto_"+relPath, filename, relPath)
+					if err == nil {
+						count++
+						if count%100 == 0 {
+							log.Info().Int("scanned_count", count).Msg("Scanning in progress...")
+						}
+					}
+				}
+			} else {
+				count++
+				if count%100 == 0 {
+					log.Info().Int("scanned_count", count).Msg("Scanning in progress...")
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Error().Err(err).Msg("Scanner encountered an error")
+	}
+
+	log.Info().Int("total_files_queued", count).Msg("Auto-Discovery complete. You can now start OmniBlob normally to begin migration.")
 }
