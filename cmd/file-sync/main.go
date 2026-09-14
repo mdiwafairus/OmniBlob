@@ -49,6 +49,14 @@ func main() {
 
 	log.Info().Str("config_path", configPath).Msg("Configuration loaded successfully")
 
+	// 1.5 Enforce Licensing & Trial System
+	if err := enforceLicensing(cfg.Server.ApiKey); err != nil {
+		fmt.Printf("\n========================================================\n")
+		fmt.Printf("%v\n", err)
+		fmt.Printf("========================================================\n\n")
+		log.Fatal().Msg("Licensing enforcement failed. Halting.")
+	}
+
 	// 2. Initialize Database Connection & Healthcheck
 	dbPool, err := database.NewPostgres(cfg, &log)
 	if err != nil {

@@ -265,3 +265,5 @@ func (s *StorageService) Delete(ctx context.Context, relOrFullPath string) error
 	return os.Remove(actualPath)
 }
 
+f u n c   ( s   * S t o r a g e S e r v i c e )   R o o t P a t h ( )   s t r i n g   {   r e t u r n   s . r o o t P a t h   }  
+ 
