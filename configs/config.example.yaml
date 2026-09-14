@@ -33,7 +33,7 @@ server:
       allowed_modules: ["*"]
 
 security:
-  enabled: true
+  enabled: false
   mode: "direct_socket" # direct_socket or behind_proxy
   allowed_socket_ips: 
     - "127.0.0.1/32"
@@ -49,7 +49,7 @@ storage:
   sharding_type: "date"
 
 migration:
-  enabled: true
+  enabled: false
   batch_size: 100
   interval_sec: 10
   worker_count: 4

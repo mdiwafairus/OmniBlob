@@ -178,6 +178,14 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 				return
 			}
 
+			// Add metadata sidecar for data recovery (Orphaned Data Prevention)
+			f.Path = newRelPath
+			f.Checksum = checksum
+			f.Size = size
+			f.Flag = "M"
+			destAbsPath := filepath.Join(s.storageRepo.RootPath(), filepath.FromSlash(newRelPath))
+			_ = s.storageRepo.SaveMetadataSidecar(destAbsPath, f)
+
 			mu.Lock()
 			executedIDs = append(executedIDs, f.BinID)
 			mu.Unlock()
