@@ -1,4 +1,5 @@
-﻿# OmniBlob Future Improvements
+﻿<!-- go build -ldflags="-s -w" -o omniblob.exe ./cmd/file-sync -->
+# OmniBlob Future Improvements
 
 ## 1. Graceful License Degradation (High Priority)
 - **Issue:** Currently, if the 90-day trial expires, the app calls `os.Exit(1)` (Fatal panic) via `enforceLicensing()`, killing all server operations.
