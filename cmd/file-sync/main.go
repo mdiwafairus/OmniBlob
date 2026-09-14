@@ -190,27 +190,21 @@ func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logg
 				dir = ""
 			}
 			
-			// Try to insert WITH create_date (ModTime) and size
-			_, err = dbPool.Exec(ctx, 
-				`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag, create_date, size) 
-				 VALUES ($1, 'legacy_scan', $2, $3, $4, '1', $5, $6)
-				 ON CONFLICT DO NOTHING`,
-				 "auto_"+relPath, dir, filename, relPath, modTime, size)
+			// Check if file already exists in DB to prevent duplicates
+			// (Since the table might not have a UNIQUE constraint on path)
+			var exists bool
+			_ = dbPool.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 AND module = 'legacy_scan' LIMIT 1", relPath).Scan(&exists)
 			
-			if err != nil {
-				var exists bool
-				_ = dbPool.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 LIMIT 1", relPath).Scan(&exists)
-				if !exists {
-					_, err = dbPool.Exec(ctx, 
-						`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag, create_date, size) 
-						 VALUES ($1, 'legacy_scan', $2, $3, $4, '1', $5, $6)`,
-						 "auto_"+relPath, dir, filename, relPath, modTime, size)
-					if err == nil {
-						count++
-					}
+			if !exists {
+				// Try to insert WITH create_date (ModTime) and size
+				_, err = dbPool.Exec(ctx, 
+					`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag, create_date, size) 
+					 VALUES ($1, 'legacy_scan', $2, $3, $4, '1', $5, $6)`,
+					 "auto_"+relPath, dir, filename, relPath, modTime, size)
+				
+				if err == nil {
+					count++
 				}
-			} else {
-				count++
 			}
 		}
 		return nil
