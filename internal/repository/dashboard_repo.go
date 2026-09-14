@@ -314,11 +314,11 @@ func (r *dashboardRepository) GetJobHistory(ctx context.Context, clientID string
 	// Get recent jobs (limit 20)
 	query := `
 		SELECT 
-			id, 
+			id::VARCHAR, 
 			'Background Migration' as name, 
 			'Migrasi' as type, 
 			0 as volume_bytes, 
-			TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI') as date, 
+			TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as date, 
 			error_logs as status
 		FROM log_file_rsync
 		ORDER BY id DESC LIMIT 20
