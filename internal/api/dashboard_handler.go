@@ -45,7 +45,9 @@ func (h *DashboardHandler) getCached(key string) (interface{}, bool) {
 	h.cacheMu.RLock()
 	defer h.cacheMu.RUnlock()
 	entry, exists := h.cacheData[key]
-	if exists && time.Since(entry.timestamp) < 5*time.Minute {
+	// Reduced cache from 5 minutes to 3 seconds to allow real-time dashboard updates
+	// while still protecting the database from refresh-spamming
+	if exists && time.Since(entry.timestamp) < 3*time.Second {
 		return entry.data, true
 	}
 	return nil, false

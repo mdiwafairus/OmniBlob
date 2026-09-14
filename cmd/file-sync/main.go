@@ -204,6 +204,8 @@ func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logg
 				
 				if err == nil {
 					count++
+				} else {
+					log.Warn().Err(err).Str("file", filename).Msg("Database rejected file insertion")
 				}
 			}
 		}
