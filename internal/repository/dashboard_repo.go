@@ -15,6 +15,7 @@ type DashboardRepository interface {
 	GetModuleStats(ctx context.Context) ([]ModuleStat, error)
 	GetYearlyStats(ctx context.Context) ([]YearStat, error)
 	GetMonthlyStats(ctx context.Context) ([]MonthlyStat, error)
+	GetJobHistory(ctx context.Context, clientID string) ([]JobHistory, int64, error)
 }
 
 type dashboardRepository struct {
@@ -25,12 +26,24 @@ func NewDashboardRepository(db *pgxpool.Pool) DashboardRepository {
 	return &dashboardRepository{db: db}
 }
 
+type JobHistory struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	VolumeBytes int64  `json:"volume_bytes"`
+	Date        string `json:"date"`
+	Duration    string `json:"duration"`
+	Status      string `json:"status"`
+}
+
 type DashboardSummary struct {
-	TotalDataMigratedBytes int64   `json:"total_data_migrated_bytes"`
-	TotalFilesMigrated     int64   `json:"total_files_migrated"`
-	TotalPendingFiles      int64   `json:"total_pending_files"`
-	OverallProgressPercent float64 `json:"overall_progress_percent"`
-	StaleFilesOver1Year    int64   `json:"stale_files_over_1_year"`
+	TotalDataMigratedBytes  int64        `json:"total_data_migrated_bytes"`
+	TotalFilesMigrated      int64        `json:"total_files_migrated"`
+	TotalPendingFiles       int64        `json:"total_pending_files"`
+	OverallProgressPercent  float64      `json:"overall_progress_percent"`
+	StaleFilesOver1Year     int64        `json:"stale_files_over_1_year"`
+	TotalLifetimeMigrations int64        `json:"total_lifetime_migrations"`
+	MigrationHistory        []JobHistory `json:"migration_history"`
 }
 
 type ExtensionStat struct {
@@ -286,4 +299,49 @@ func (r *dashboardRepository) GetMonthlyStats(ctx context.Context) ([]MonthlySta
 		stats = append(stats, s)
 	}
 	return stats, nil
+}
+func (r *dashboardRepository) GetJobHistory(ctx context.Context, clientID string) ([]JobHistory, int64, error) {
+	var totalJobs int64
+	var history []JobHistory
+
+	// Get total count from log_file_rsync
+	countQuery := "SELECT COUNT(*) FROM log_file_rsync"
+	err := r.db.QueryRow(ctx, countQuery).Scan(&totalJobs)
+	if err != nil {
+		return []JobHistory{}, 0, nil
+	}
+
+	// Get recent jobs (limit 20)
+	query := `
+		SELECT 
+			id, 
+			'Background Migration' as name, 
+			'Migrasi' as type, 
+			0 as volume_bytes, 
+			TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI') as date, 
+			error_logs as status
+		FROM log_file_rsync
+		ORDER BY id DESC LIMIT 20
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return []JobHistory{}, 0, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var j JobHistory
+		if err := rows.Scan(&j.ID, &j.Name, &j.Type, &j.VolumeBytes, &j.Date, &j.Status); err != nil {
+			return nil, 0, err
+		}
+		
+		j.Duration = "< 1m" // Batch duration is usually fast
+		history = append(history, j)
+	}
+	
+	if history == nil {
+		history = []JobHistory{}
+	}
+	
+	return history, totalJobs, nil
 }

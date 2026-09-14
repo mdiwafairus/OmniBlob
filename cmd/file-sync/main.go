@@ -160,12 +160,26 @@ func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logg
 	var count int
 	err := filepath.WalkDir(legacyPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// Skip files/folders with permission errors instead of aborting the whole scan
+			log.Warn().Err(err).Str("path", path).Msg("Skipping inaccessible path")
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if !d.IsDir() {
 			relPath, err := filepath.Rel(legacyPath, path)
 			if err != nil {
 				return nil
+			}
+
+			// Extract original ModTime to fix Dashboard year
+			info, err := d.Info()
+			modTime := time.Now()
+			size := int64(0)
+			if err == nil {
+				modTime = info.ModTime()
+				size = info.Size()
 			}
 
 			// Clean path for database storage (use forward slashes universally)
@@ -176,21 +190,21 @@ func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logg
 				dir = ""
 			}
 			
-			// Try to insert
+			// Try to insert WITH create_date (ModTime) and size
 			_, err = dbPool.Exec(ctx, 
-				`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag) 
-				 VALUES ($1, 'legacy_scan', $2, $3, $4, '1')
+				`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag, create_date, size) 
+				 VALUES ($1, 'legacy_scan', $2, $3, $4, '1', $5, $6)
 				 ON CONFLICT DO NOTHING`,
-				 "auto_"+relPath, dir, filename, relPath)
+				 "auto_"+relPath, dir, filename, relPath, modTime, size)
 			
 			if err != nil {
 				var exists bool
 				_ = dbPool.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 LIMIT 1", relPath).Scan(&exists)
 				if !exists {
 					_, err = dbPool.Exec(ctx, 
-						`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag) 
-						 VALUES ($1, 'legacy_scan', $2, $3, $4, '1')`,
-						 "auto_"+relPath, dir, filename, relPath)
+						`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag, create_date, size) 
+						 VALUES ($1, 'legacy_scan', $2, $3, $4, '1', $5, $6)`,
+						 "auto_"+relPath, dir, filename, relPath, modTime, size)
 					if err == nil {
 						count++
 					}
@@ -203,7 +217,7 @@ func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logg
 	})
 
 	if err != nil {
-		log.Error().Err(err).Msg("Scanner encountered an error")
+		log.Error().Err(err).Msg("Scanner finished with some errors")
 	}
 
 	log.Info().Int("total_files_queued", count).Msg("Auto-Discovery complete. You can now start OmniBlob normally to begin migration.")

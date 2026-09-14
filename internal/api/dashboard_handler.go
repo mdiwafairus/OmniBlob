@@ -86,6 +86,19 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		clientNames = append(clientNames, c.Name)
 	}
 
+	// Fetch Job History (for global view, pass empty clientID)
+	// In the future, this can be filtered via r.URL.Query().Get("client")
+	clientID := r.URL.Query().Get("client")
+	history, totalJobs, err := h.repo.GetJobHistory(ctx, clientID)
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get job history")
+	}
+	
+	// Ensure we don't send nil arrays to frontend
+	if history == nil {
+		history = []repository.JobHistory{}
+	}
+
 	response := map[string]interface{}{
 		"total_data_migrated_bytes": summary.TotalDataMigratedBytes,
 		"total_files_migrated":      summary.TotalFilesMigrated,
@@ -101,6 +114,8 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		"legacy_path":               h.str.LegacyPath,
 		"sharding_type":             h.str.ShardingType,
 		"clients":                   clientNames,
+		"total_lifetime_migrations": totalJobs,
+		"migration_history":         history,
 	}
 
 	h.setCache("summary", response)
