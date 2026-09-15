@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/gibson042/canonicaljson-go v1.0.3 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.11.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
