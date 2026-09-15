@@ -186,6 +186,10 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Add metadata sidecar for data recovery (Orphaned Data Prevention)
+	destAbsPath := filepath.Join(h.storageRepo.RootPath(), filepath.FromSlash(relPath))
+	_ = h.storageRepo.SaveMetadataSidecar(destAbsPath, *binaryRecord)
+
 	appName := "anonymous"
 	if client := GetClientFromContext(r.Context()); client != nil {
 		appName = client.Name
@@ -387,6 +391,10 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
 			continue
 		}
+
+		// Add metadata sidecar
+		destAbsPath := filepath.Join(h.storageRepo.RootPath(), filepath.FromSlash(relPath))
+		_ = h.storageRepo.SaveMetadataSidecar(destAbsPath, *binaryRecord)
 
 		results = append(results, FileResult{
 			FileName: header.Filename,

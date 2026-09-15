@@ -49,6 +49,14 @@ func main() {
 
 	log.Info().Str("config_path", configPath).Msg("Configuration loaded successfully")
 
+	// 1.5 Enforce Licensing & Trial System
+	if err := enforceLicensing(cfg.Server.ApiKey); err != nil {
+		fmt.Printf("\n========================================================\n")
+		fmt.Printf("%v\n", err)
+		fmt.Printf("========================================================\n\n")
+		log.Fatal().Msg("Licensing enforcement failed. Halting.")
+	}
+
 	// 2. Initialize Database Connection & Healthcheck
 	dbPool, err := database.NewPostgres(cfg, &log)
 	if err != nil {
@@ -152,12 +160,26 @@ func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logg
 	var count int
 	err := filepath.WalkDir(legacyPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// Skip files/folders with permission errors instead of aborting the whole scan
+			log.Warn().Err(err).Str("path", path).Msg("Skipping inaccessible path")
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if !d.IsDir() {
 			relPath, err := filepath.Rel(legacyPath, path)
 			if err != nil {
 				return nil
+			}
+
+			// Extract original ModTime to fix Dashboard year
+			info, err := d.Info()
+			modTime := time.Now()
+			size := int64(0)
+			if err == nil {
+				modTime = info.ModTime()
+				size = info.Size()
 			}
 
 			// Clean path for database storage (use forward slashes universally)
@@ -168,34 +190,30 @@ func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logg
 				dir = ""
 			}
 			
-			// Try to insert
-			_, err = dbPool.Exec(ctx, 
-				`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag) 
-				 VALUES ($1, 'legacy_scan', $2, $3, $4, '1')
-				 ON CONFLICT DO NOTHING`,
-				 "auto_"+relPath, dir, filename, relPath)
+			// Check if file already exists in DB to prevent duplicates
+			// (Since the table might not have a UNIQUE constraint on path)
+			var exists bool
+			_ = dbPool.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 AND module = 'legacy_scan' LIMIT 1", relPath).Scan(&exists)
 			
-			if err != nil {
-				var exists bool
-				_ = dbPool.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 LIMIT 1", relPath).Scan(&exists)
-				if !exists {
-					_, err = dbPool.Exec(ctx, 
-						`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag) 
-						 VALUES ($1, 'legacy_scan', $2, $3, $4, '1')`,
-						 "auto_"+relPath, dir, filename, relPath)
-					if err == nil {
-						count++
-					}
+			if !exists {
+				// Try to insert WITH create_date (ModTime) and size
+				_, err = dbPool.Exec(ctx, 
+					`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag, create_date, size) 
+					 VALUES ($1, 'legacy_scan', $2, $3, $4, '1', $5, $6)`,
+					 "auto_"+relPath, dir, filename, relPath, modTime, size)
+				
+				if err == nil {
+					count++
+				} else {
+					log.Warn().Err(err).Str("file", filename).Msg("Database rejected file insertion")
 				}
-			} else {
-				count++
 			}
 		}
 		return nil
 	})
 
 	if err != nil {
-		log.Error().Err(err).Msg("Scanner encountered an error")
+		log.Error().Err(err).Msg("Scanner finished with some errors")
 	}
 
 	log.Info().Int("total_files_queued", count).Msg("Auto-Discovery complete. You can now start OmniBlob normally to begin migration.")
