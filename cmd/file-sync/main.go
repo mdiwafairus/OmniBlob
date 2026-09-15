@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,12 +17,16 @@ import (
 	"pwni-file-sync/internal/repository"
 	"pwni-file-sync/internal/service"
 	"pwni-file-sync/internal/storage"
+
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/rs/zerolog"
 )
 
 func main() {
 	configFlag := flag.String("config", "configs/config.yaml", "Path to configuration file")
 	portFlag := flag.Int("port", 0, "Override server port")
 	maxUploadFlag := flag.Int("max-upload", 0, "Override max upload size in MB")
+	scanLegacy := flag.Bool("scan-legacy", false, "Scan legacy_path and automatically populate the database for migration")
 	flag.Parse()
 
 	log := logger.NewLogger()
@@ -44,6 +49,14 @@ func main() {
 
 	log.Info().Str("config_path", configPath).Msg("Configuration loaded successfully")
 
+	// 1.5 Enforce Licensing & Trial System
+	if err := enforceLicensing(cfg.Server.ApiKey); err != nil {
+		fmt.Printf("\n========================================================\n")
+		fmt.Printf("%v\n", err)
+		fmt.Printf("========================================================\n\n")
+		log.Fatal().Msg("Licensing enforcement failed. Halting.")
+	}
+
 	// 2. Initialize Database Connection & Healthcheck
 	dbPool, err := database.NewPostgres(cfg, &log)
 	if err != nil {
@@ -53,6 +66,11 @@ func main() {
 		log.Info().Msg("Closing database connection pool...")
 		dbPool.Close()
 	}()
+
+	if *scanLegacy {
+		runLegacyScanner(dbPool, cfg.Storage.LegacyPath, &log)
+		return
+	}
 
 	// 3. Initialize Storage Engine
 	storageService, err := storage.NewStorageService(&cfg.Storage)
@@ -67,50 +85,30 @@ func main() {
 	// 4. Initialize Repositories
 	binaryRepo := repository.NewBinaryFileRepository(dbPool)
 	logRepo := repository.NewLogRepository(dbPool)
-	orphanRepo := repository.NewOrphanLogRepository(dbPool)
+	dashboardRepo := repository.NewDashboardRepository(dbPool)
 
 	// Context for graceful background jobs
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Parse flags
-	runQuarantine := false
-	dryRun := true
-	for _, arg := range os.Args[1:] {
-		if arg == "--quarantine" {
-			runQuarantine = true
-			dryRun = false
-		} else if arg == "--quarantine-dryrun" {
-			runQuarantine = true
-			dryRun = true
-		}
-	}
-
-	if runQuarantine {
-		dedupCfg := &service.DedupConfig{
-			StorageRoot:     cfg.Storage.RootPath,
-			DryRun:          dryRun,
-			GracePeriodDays: 1,
-			MaxMoveLimit:    100,
-		}
-		dedupSvc := service.NewDedupService(dedupCfg, binaryRepo, orphanRepo, log)
-		if err := dedupSvc.FindAndQuarantineOrphans(ctx); err != nil {
-			log.Fatal().Err(err).Msg("Quarantine process failed")
-		}
-		return // Exit after running command
-	}
-
 	// 5. Start Background File Migration Worker (reorganizing legacy NFS files locally)
 	migrationService := service.NewMigrationService(&cfg.Migration, storageService, binaryRepo, logRepo, log)
 	go migrationService.StartBackgroundMigration(ctx)
 
-	// 6. Initialize API Handlers & HTTP Server
-	dashboardService := service.NewDashboardService(binaryRepo, logRepo)
-	dashboardHandler := api.NewDashboardHandler(dashboardService)
+	// 5.5 Initialize Audit Logger
+	auditLogger, err := logger.NewAuditLogger("logs")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize Audit Logger")
+	}
+	defer auditLogger.Close()
 
-	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB)
-	router := api.NewRouter(handler, dashboardHandler, &cfg.Server, log)
-	httpServer := api.NewServer(&cfg.Server, router, log)
+	// 6. Initialize HTTP API Server (MERGE CONFLICT RESOLVED)
+	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Server.AllowedExtensions, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
+	dashboardHandler := api.NewDashboardHandler(dashboardRepo, &cfg.Server, &cfg.Migration, &cfg.Storage, log)
+	explorerHandler := api.NewExplorerHandler(&cfg.Storage, &cfg.Migration, log)
+	
+	router := api.NewRouter(handler, dashboardHandler, explorerHandler, &cfg.Server, &cfg.Security, auditLogger, cfg.Auth.SecretKey, log, dbPool)
+	httpServer := api.NewServer(&cfg.Server, &cfg.Security, auditLogger, router, log)
 
 	// Run HTTP Server in a separate goroutine
 	go func() {
@@ -148,4 +146,76 @@ func main() {
 	}
 
 	log.Info().Msg("pwni-file-sync service stopped cleanly.")
+}
+
+func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logger) {
+	log.Info().Str("legacy_path", legacyPath).Msg("Starting Auto-Discovery Legacy File Scanner...")
+	
+	if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
+		log.Error().Msg("Legacy path does not exist. Cannot scan.")
+		return
+	}
+
+	ctx := context.Background()
+
+	var count int
+	err := filepath.WalkDir(legacyPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			// Skip files/folders with permission errors instead of aborting the whole scan
+			log.Warn().Err(err).Str("path", path).Msg("Skipping inaccessible path")
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() {
+			relPath, err := filepath.Rel(legacyPath, path)
+			if err != nil {
+				return nil
+			}
+
+			// Extract original ModTime to fix Dashboard year
+			info, err := d.Info()
+			modTime := time.Now()
+			size := int64(0)
+			if err == nil {
+				modTime = info.ModTime()
+				size = info.Size()
+			}
+
+			// Clean path for database storage (use forward slashes universally)
+			relPath = filepath.ToSlash(relPath)
+			filename := filepath.Base(relPath)
+			dir := filepath.Dir(relPath)
+			if dir == "." {
+				dir = ""
+			}
+			
+			// Check if file already exists in DB to prevent duplicates
+			// (Since the table might not have a UNIQUE constraint on path)
+			var exists bool
+			_ = dbPool.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 AND module = 'legacy_scan' LIMIT 1", relPath).Scan(&exists)
+			
+			if !exists {
+				// Try to insert WITH create_date (ModTime) and size
+				_, err = dbPool.Exec(ctx, 
+					`INSERT INTO binary_file (referensi_id, module, directory, file_name, path, flag, create_date, size) 
+					 VALUES ($1, 'legacy_scan', $2, $3, $4, '1', $5, $6)`,
+					 "auto_"+relPath, dir, filename, relPath, modTime, size)
+				
+				if err == nil {
+					count++
+				} else {
+					log.Warn().Err(err).Str("file", filename).Msg("Database rejected file insertion")
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Error().Err(err).Msg("Scanner finished with some errors")
+	}
+
+	log.Info().Int("total_files_queued", count).Msg("Auto-Discovery complete. You can now start OmniBlob normally to begin migration.")
 }

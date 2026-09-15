@@ -130,6 +130,14 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool, log *zerolog.Logger) e
 		`CREATE INDEX IF NOT EXISTS idx_binary_file_referensi_id ON binary_file (referensi_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_binary_file_module ON binary_file (module);`,
 		`CREATE INDEX IF NOT EXISTS idx_log_file_rsync_server ON log_file_rsync (server);`,
+		`CREATE TABLE IF NOT EXISTS blocked_ip (
+			id BIGSERIAL PRIMARY KEY,
+			ip_address VARCHAR(45) NOT NULL,
+			reason TEXT,
+			blocked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			expires_at TIMESTAMP WITH TIME ZONE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_blocked_ip_address ON blocked_ip (ip_address);`,
 	}
 
 	for _, q := range queries {
