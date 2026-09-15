@@ -43,6 +43,13 @@ type ServerConfig struct {
 	Clients         []ClientConfig `yaml:"clients" mapstructure:"clients"`
 }
 
+type SecurityConfig struct {
+	Enabled          bool     `yaml:"enabled" mapstructure:"enabled"`
+	Mode             string   `yaml:"mode" mapstructure:"mode"`
+	AllowedSocketIPs []string `yaml:"allowed_socket_ips" mapstructure:"allowed_socket_ips"`
+	AuthType         string   `yaml:"auth_type" mapstructure:"auth_type"`
+}
+
 type StorageConfig struct {
 	RootPath     string `yaml:"root_path" mapstructure:"root_path"`
 	LegacyPath   string `yaml:"legacy_path" mapstructure:"legacy_path"`

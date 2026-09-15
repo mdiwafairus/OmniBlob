@@ -48,3 +48,16 @@ func GetWatermark(filename string) (time.Time, error) {
 	}
 	return wm.LastSeenTime, nil
 }
+
+// GetMonotonicTime returns a monotonic timestamp that is guaranteed to not go backwards.
+// It checks against a global/local watermark file.
+func GetMonotonicTime() time.Time {
+	now := time.Now()
+	// Ignore errors, if tampered, we still return the wall clock but it's recorded
+	_ = UpdateWatermark("audit_watermark.json", now)
+	last, _ := GetWatermark("audit_watermark.json")
+	if last.After(now) {
+		return last // Clock was rewound, return the monotonic peak
+	}
+	return now
+}
