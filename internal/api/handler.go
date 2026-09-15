@@ -21,10 +21,11 @@ import (
 type Handler struct {
 	storageRepo  *storage.StorageService
 	binaryRepo   repository.BinaryFileRepository
-	logger       zerolog.Logger
-	maxUploadMB  int64
-	accessKey    string
-	secretKey    string
+	logger            zerolog.Logger
+	maxUploadMB       int64
+	allowedExtensions []string
+	accessKey         string
+	secretKey         string
 }
 
 func NewHandler(
@@ -32,6 +33,7 @@ func NewHandler(
 	binaryRepo repository.BinaryFileRepository,
 	logger zerolog.Logger,
 	maxUploadMB int,
+	allowedExtensions []string,
 	accessKey string,
 	secretKey string,
 ) *Handler {
@@ -39,12 +41,13 @@ func NewHandler(
 		maxUploadMB = 100
 	}
 	return &Handler{
-		storageRepo:  storageRepo,
-		binaryRepo:   binaryRepo,
-		logger:       logger,
-		maxUploadMB:  int64(maxUploadMB),
-		accessKey:    accessKey,
-		secretKey:    secretKey,
+		storageRepo:       storageRepo,
+		binaryRepo:        binaryRepo,
+		logger:            logger,
+		maxUploadMB:       int64(maxUploadMB),
+		allowedExtensions: allowedExtensions,
+		accessKey:         accessKey,
+		secretKey:         secretKey,
 	}
 }
 
@@ -399,13 +402,13 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			FileName: header.Filename,
 			BinID:    binID,
 			Path:     relPath,
-			URL:      fmt.Sprintf("/api/v1/%%s/%%d", module, binID),
+			URL:      fmt.Sprintf("/api/v1/%s/%d", module, binID),
 		})
 	}
 
 	h.writeJSON(w, http.StatusOK, APIResponse{
 		Success: true,
-		Message: fmt.Sprintf("Processed %%d files", len(results)),
+		Message: fmt.Sprintf("Processed %d files", len(results)),
 		Data:    results,
 	})
 }
@@ -439,3 +442,24 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	h.writeJSON(w, http.StatusOK, APIResponse{Success: true, Message: "File deleted successfully"})
 }
+
+func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
+	method := r.URL.Query().Get("method")
+	if method == "" { method = "POST" }
+	path := r.URL.Query().Get("path")
+	if path == "" { http.Error(w, "path is required", http.StatusBadRequest); return }
+	
+	// Default expiry to 1 hour if not specified
+	expiry := 1 * time.Hour
+	
+	baseURL := "http://" + r.Host
+	presignedURL, err := auth.GeneratePresignedURL(method, baseURL, path, h.accessKey, h.secretKey, expiry)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"presigned_url": presignedURL})
+}
+

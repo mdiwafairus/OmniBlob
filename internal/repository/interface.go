@@ -17,6 +17,7 @@ type BinaryFileRepository interface {
 	GetExtensionStats(ctx context.Context) ([]entity.ExtensionStat, error)
 	GetTopLargeFiles(ctx context.Context, limit int) ([]entity.LargeFile, error)
 	GetDataQualityStats(ctx context.Context) (*entity.DataQualityStats, error)
+	ExistsByPath(ctx context.Context, path string) (bool, error)
 }
 
 type LogRepository interface {

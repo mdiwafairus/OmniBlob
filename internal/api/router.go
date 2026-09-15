@@ -98,9 +98,9 @@ func NewRouter(
 
 	// Dashboard API Routes
 	if dh != nil {
-		mux.HandleFunc("/api/v1/dashboard/summary", dh.Summary)
-		mux.HandleFunc("/api/v1/dashboard/analytics", dh.Analytics)
-		mux.HandleFunc("/api/v1/dashboard/quality", dh.Quality)
+		mux.HandleFunc("/api/v1/dashboard/summary", dh.GetSummary)
+		mux.HandleFunc("/api/v1/dashboard/analytics", dh.GetAnalytics)
+		mux.HandleFunc("/api/v1/dashboard/quality", dh.GetQuality)
 	}
 
 	// Explorer Route

@@ -85,7 +85,7 @@ func main() {
 	// 4. Initialize Repositories
 	binaryRepo := repository.NewBinaryFileRepository(dbPool)
 	logRepo := repository.NewLogRepository(dbPool)
-	dashboardRepo := repository.NewDashboardRepository(dbPool)
+	// dashboardRepo := repository.NewDashboardRepository(dbPool)
 
 	// Context for graceful background jobs
 	ctx, cancel := context.WithCancel(context.Background())
@@ -104,7 +104,8 @@ func main() {
 
 	// 6. Initialize HTTP API Server (MERGE CONFLICT RESOLVED)
 	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Server.AllowedExtensions, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
-	dashboardHandler := api.NewDashboardHandler(dashboardRepo, &cfg.Server, &cfg.Migration, &cfg.Storage, log)
+	dashboardService := service.NewDashboardService(binaryRepo, logRepo)
+	dashboardHandler := api.NewDashboardHandler(dashboardService)
 	explorerHandler := api.NewExplorerHandler(&cfg.Storage, &cfg.Migration, log)
 	
 	router := api.NewRouter(handler, dashboardHandler, explorerHandler, &cfg.Server, &cfg.Security, auditLogger, cfg.Auth.SecretKey, log, dbPool)

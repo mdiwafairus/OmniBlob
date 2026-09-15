@@ -344,3 +344,16 @@ func (r *binaryFileRepository) GetDataQualityStats(ctx context.Context) (*entity
 
 	return &stats, nil
 }
+
+func (r *binaryFileRepository) ExistsByPath(ctx context.Context, path string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, "SELECT true FROM binary_file WHERE path = $1 LIMIT 1", path).Scan(&exists)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return false, nil
+		}
+		return false, err
+	}
+	return exists, nil
+}
+

@@ -15,6 +15,7 @@ type Config struct {
 	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
 	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
+	Security  SecurityConfig  `yaml:"security" mapstructure:"security"`
 }
 
 type AuthConfig struct {
@@ -28,6 +29,7 @@ type ClientConfig struct {
 	ApiKey         string   `yaml:"api_key" mapstructure:"api_key"`
 	User           string   `yaml:"user" mapstructure:"user"`
 	Password       string   `yaml:"password" mapstructure:"password"`
+	WhitelistIPs   []string `yaml:"whitelist_ips" mapstructure:"whitelist_ips"`
 	AllowedModules []string `yaml:"allowed_modules" mapstructure:"allowed_modules"`
 }
 
@@ -40,6 +42,7 @@ type ServerConfig struct {
 	ApiKey          string         `yaml:"api_key" mapstructure:"api_key"`
 	ApiUser         string         `yaml:"api_user" mapstructure:"api_user"`
 	ApiPass         string         `yaml:"api_pass" mapstructure:"api_pass"`
+	AllowedExtensions []string     `yaml:"allowed_extensions" mapstructure:"allowed_extensions"`
 	Clients         []ClientConfig `yaml:"clients" mapstructure:"clients"`
 }
 
