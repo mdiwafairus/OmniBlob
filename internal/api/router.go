@@ -13,7 +13,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func NewRouter(h *Handler, cfg *config.ServerConfig, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger, log zerolog.Logger) http.Handler {
+func NewRouter(h *Handler, dh *DashboardHandler, eh *ExplorerHandler, cfg *config.ServerConfig, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger, log zerolog.Logger) http.Handler {
 	mux := http.NewServeMux()
 
 	// Extract the embedded dashboard files
@@ -83,6 +83,14 @@ func NewRouter(h *Handler, cfg *config.ServerConfig, secCfg *config.SecurityConf
 
 	// Health check (Public)
 	mux.HandleFunc("/health", h.HealthCheck)
+
+	// Dashboard Dashboard API Routes
+	mux.HandleFunc("/api/v1/dashboard/summary", dh.Summary)
+	mux.HandleFunc("/api/v1/dashboard/analytics", dh.Analytics)
+	mux.HandleFunc("/api/v1/dashboard/quality", dh.Quality)
+	
+	// Explorer Route
+	mux.HandleFunc("/api/v1/explorer/list", eh.ListDirectory)
 
 	// API Routes (Upload is Protected with Per-App Auth)
 	uploadHandler := AppAuthMiddleware(cfg, log, h.Upload)

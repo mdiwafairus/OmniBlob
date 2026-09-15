@@ -232,6 +232,14 @@ func (s *StorageService) MigrateLegacyFile(ctx context.Context, bucket string, l
 		return "", "", 0, err
 	}
 
+	// Idempotency Check (The "rsync" logic)
+	// If the destination file already exists and its size perfectly matches the source,
+	// we skip the expensive disk write (overwrite) and just generate the hash.
+	if destInfo, err := os.Stat(destAbsPath); err == nil && destInfo.Size() == info.Size() {
+		checksum, _ := fileutil.SHA256FromFile(destAbsPath)
+		return destRelPath, checksum, destInfo.Size(), nil
+	}
+
 	destFile, err := os.Create(destAbsPath)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("create dest: %w", err)
@@ -265,3 +273,4 @@ func (s *StorageService) Delete(ctx context.Context, relOrFullPath string) error
 	return os.Remove(actualPath)
 }
 
+func (s *StorageService) RootPath() string { return s.rootPath }
