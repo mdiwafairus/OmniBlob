@@ -13,6 +13,7 @@ require (
 
 require (
 	github.com/gibson042/canonicaljson-go v1.0.3 // indirect
+	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.11.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
@@ -23,7 +24,10 @@ require (
 	github.com/jackc/puddle v1.2.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
+	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 	golang.org/x/text v0.29.0 // indirect
 )
