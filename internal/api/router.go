@@ -8,6 +8,7 @@ import (
 	"pwni-file-sync/internal/config"
 
 	"github.com/rs/zerolog"
+	"pwni-file-sync/internal/auth"
 )
 
 func NewRouter(h *Handler, dashboardHandler *DashboardHandler, cfg *config.ServerConfig, log zerolog.Logger) http.Handler {

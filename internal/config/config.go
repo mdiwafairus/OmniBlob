@@ -11,10 +11,17 @@ import (
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server" mapstructure:"server"`
+	Auth      AuthConfig      `yaml:"auth" mapstructure:"auth"`
 	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
 	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
 }
+
+type AuthConfig struct {
+	AccessKey string `yaml:"access_key" mapstructure:"access_key"`
+	SecretKey string `yaml:"secret_key" mapstructure:"secret_key"`
+}
+
 
 type ClientConfig struct {
 	Name           string   `yaml:"name" mapstructure:"name"`
