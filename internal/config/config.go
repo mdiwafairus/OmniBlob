@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Server    ServerConfig    `yaml:"server" mapstructure:"server"`
 	Auth      AuthConfig      `yaml:"auth" mapstructure:"auth"`
+	Security  SecurityConfig  `yaml:"security" mapstructure:"security"`
 	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
 	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
@@ -21,7 +22,6 @@ type AuthConfig struct {
 	AccessKey string `yaml:"access_key" mapstructure:"access_key"`
 	SecretKey string `yaml:"secret_key" mapstructure:"secret_key"`
 }
-
 
 type ClientConfig struct {
 	Name           string   `yaml:"name" mapstructure:"name"`
@@ -41,6 +41,13 @@ type ServerConfig struct {
 	ApiUser         string         `yaml:"api_user" mapstructure:"api_user"`
 	ApiPass         string         `yaml:"api_pass" mapstructure:"api_pass"`
 	Clients         []ClientConfig `yaml:"clients" mapstructure:"clients"`
+}
+
+type SecurityConfig struct {
+	Enabled          bool     `yaml:"enabled" mapstructure:"enabled"`
+	Mode             string   `yaml:"mode" mapstructure:"mode"`
+	AllowedSocketIPs []string `yaml:"allowed_socket_ips" mapstructure:"allowed_socket_ips"`
+	AuthType         string   `yaml:"auth_type" mapstructure:"auth_type"`
 }
 
 type StorageConfig struct {
@@ -145,11 +152,20 @@ func LoadConfig(path string) (*Config, error) {
 	if apiPass := os.Getenv("API_PASS"); apiPass != "" {
 		cfg.Server.ApiPass = apiPass
 	}
+
+	// Override config untuk Autentikasi / Presigned URL (Dari branch feature/presigned-url)
 	if accessKey := os.Getenv("MINIO_ACCESS_KEY"); accessKey != "" {
 		cfg.Auth.AccessKey = accessKey
 	}
 	if secretKey := os.Getenv("MINIO_SECRET_KEY"); secretKey != "" {
 		cfg.Auth.SecretKey = secretKey
+	}
+
+	// Override config untuk Worker Migrasi (Dari branch main)
+	if migrationEnabled := os.Getenv("MIGRATION_ENABLED"); migrationEnabled != "" {
+		if b, err := strconv.ParseBool(migrationEnabled); err == nil {
+			cfg.Migration.Enabled = b
+		}
 	}
 
 	return &cfg, nil

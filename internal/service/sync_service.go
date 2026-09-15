@@ -160,11 +160,13 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 			}
 
 			// Migrate local file to sharded layout
+			// RESOLUSI: Menggunakan 8 parameter ("uploads" sebagai bucket dan f.Directory)
 			newRelPath, checksum, size, err := s.storageRepo.MigrateLegacyFile(
-				ctx, "uploads", legacyPath, f.Module, f.BinID, f.FileName, f.CreateDate,
+				ctx, "uploads", legacyPath, f.Module, f.Directory, f.BinID, f.FileName, f.CreateDate,
 			)
 
 			if err != nil {
+				s.logger.Error().Err(err).Int64("bin_id", f.BinID).Str("path", legacyPath).Msg("Failed to migrate file (Skipping)")
 				mu.Lock()
 				errorCount++
 				mu.Unlock()
@@ -179,6 +181,14 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 				mu.Unlock()
 				return
 			}
+
+			// Add metadata sidecar for data recovery (Orphaned Data Prevention)
+			f.Path = newRelPath
+			f.Checksum = checksum
+			f.Size = size
+			f.Flag = "M"
+			destAbsPath := filepath.Join(s.storageRepo.RootPath(), filepath.FromSlash(newRelPath))
+			_ = s.storageRepo.SaveMetadataSidecar(destAbsPath, f)
 
 			mu.Lock()
 			executedIDs = append(executedIDs, f.BinID)
