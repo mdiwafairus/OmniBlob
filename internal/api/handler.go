@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"pwni-file-sync/internal/auth"
 	"pwni-file-sync/internal/entity"
 	"pwni-file-sync/internal/repository"
 	"pwni-file-sync/internal/storage"
@@ -18,10 +19,12 @@ import (
 )
 
 type Handler struct {
-	storageRepo *storage.StorageService
-	binaryRepo  repository.BinaryFileRepository
-	logger      zerolog.Logger
-	maxUploadMB int64
+	storageRepo  *storage.StorageService
+	binaryRepo   repository.BinaryFileRepository
+	logger       zerolog.Logger
+	maxUploadMB  int64
+	accessKey    string
+	secretKey    string
 }
 
 func NewHandler(
@@ -29,15 +32,19 @@ func NewHandler(
 	binaryRepo repository.BinaryFileRepository,
 	logger zerolog.Logger,
 	maxUploadMB int,
+	accessKey string,
+	secretKey string,
 ) *Handler {
 	if maxUploadMB <= 0 {
 		maxUploadMB = 100
 	}
 	return &Handler{
-		storageRepo: storageRepo,
-		binaryRepo:  binaryRepo,
-		logger:      logger,
-		maxUploadMB: int64(maxUploadMB),
+		storageRepo:  storageRepo,
+		binaryRepo:   binaryRepo,
+		logger:       logger,
+		maxUploadMB:  int64(maxUploadMB),
+		accessKey:    accessKey,
+		secretKey:    secretKey,
 	}
 }
 

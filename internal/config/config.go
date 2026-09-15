@@ -11,10 +11,17 @@ import (
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server" mapstructure:"server"`
+	Auth      AuthConfig      `yaml:"auth" mapstructure:"auth"`
 	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
 	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
 }
+
+type AuthConfig struct {
+	AccessKey string `yaml:"access_key" mapstructure:"access_key"`
+	SecretKey string `yaml:"secret_key" mapstructure:"secret_key"`
+}
+
 
 type ClientConfig struct {
 	Name           string   `yaml:"name" mapstructure:"name"`
@@ -34,6 +41,13 @@ type ServerConfig struct {
 	ApiUser         string         `yaml:"api_user" mapstructure:"api_user"`
 	ApiPass         string         `yaml:"api_pass" mapstructure:"api_pass"`
 	Clients         []ClientConfig `yaml:"clients" mapstructure:"clients"`
+}
+
+type SecurityConfig struct {
+	Enabled          bool     `yaml:"enabled" mapstructure:"enabled"`
+	Mode             string   `yaml:"mode" mapstructure:"mode"`
+	AllowedSocketIPs []string `yaml:"allowed_socket_ips" mapstructure:"allowed_socket_ips"`
+	AuthType         string   `yaml:"auth_type" mapstructure:"auth_type"`
 }
 
 type StorageConfig struct {
