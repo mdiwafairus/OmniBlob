@@ -7,18 +7,28 @@ import (
 	"time"
 
 	"pwni-file-sync/dashboard"
+	"pwni-file-sync/internal/auth"
 	"pwni-file-sync/internal/config"
 	"pwni-file-sync/internal/logger"
 
 	"github.com/rs/zerolog"
 )
 
-func NewRouter(h *Handler, dh *DashboardHandler, eh *ExplorerHandler, cfg *config.ServerConfig, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger, log zerolog.Logger) http.Handler {
+func NewRouter(
+	h *Handler,
+	dh *DashboardHandler,
+	eh *ExplorerHandler,
+	cfg *config.ServerConfig,
+	secCfg *config.SecurityConfig,
+	auditLogger *logger.AuditLogger,
+	secretKey string,
+	log zerolog.Logger,
+) http.Handler {
 	mux := http.NewServeMux()
 
 	// Extract the embedded dashboard files
 	distFS, err := fs.Sub(dashboard.FS, "dist")
-	
+
 	// Serve Dashboard if built, otherwise fallback to basic status
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Do not intercept API or Health routes
@@ -34,13 +44,13 @@ func NewRouter(h *Handler, dh *DashboardHandler, eh *ExplorerHandler, cfg *confi
 			if filePath == "" {
 				filePath = "index.html"
 			}
-			
+
 			if _, statErr := fs.Stat(distFS, filePath); statErr == nil {
 				// File exists, serve it
 				http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
 				return
 			}
-			
+
 			// Fallback to index.html for React Router / SPA
 			r.URL.Path = "/"
 			http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
@@ -84,35 +94,54 @@ func NewRouter(h *Handler, dh *DashboardHandler, eh *ExplorerHandler, cfg *confi
 	// Health check (Public)
 	mux.HandleFunc("/health", h.HealthCheck)
 
-	// Dashboard Dashboard API Routes
-	mux.HandleFunc("/api/v1/dashboard/summary", dh.Summary)
-	mux.HandleFunc("/api/v1/dashboard/analytics", dh.Analytics)
-	mux.HandleFunc("/api/v1/dashboard/quality", dh.Quality)
-	
-	// Explorer Route
-	mux.HandleFunc("/api/v1/explorer/list", eh.ListDirectory)
+	// Dashboard Dashboard API Routes (Dari Main)
+	if dh != nil {
+		mux.HandleFunc("/api/v1/dashboard/summary", dh.Summary)
+		mux.HandleFunc("/api/v1/dashboard/analytics", dh.Analytics)
+		mux.HandleFunc("/api/v1/dashboard/quality", dh.Quality)
+	}
 
-	// API Routes (Upload is Protected with Per-App Auth)
+	// Explorer Route (Dari Main)
+	if eh != nil {
+		mux.HandleFunc("/api/v1/explorer/list", eh.ListDirectory)
+	}
+
+	// Presign URL generator (requires AppAuthMiddleware) (Dari Fitur Presigned URL)
+	presignHandler := AppAuthMiddleware(cfg, log, h.GeneratePresignedURL)
+	mux.HandleFunc("/api/v1/presign", presignHandler)
+
+	// API Routes (Upload is Protected with Per-App Auth OR Presigned URL)
 	uploadHandler := AppAuthMiddleware(cfg, log, h.Upload)
 	bulkUploadHandler := AppAuthMiddleware(cfg, log, h.BulkUpload)
-	
-	mux.HandleFunc("/api/v1/files/upload", uploadHandler)
-	mux.HandleFunc("/api/v1/files/bulk-upload", bulkUploadHandler)
-	mux.HandleFunc("/api/v1/files/view", h.ServeFileByRef)
-	mux.HandleFunc("/api/v1/files/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/files/upload" {
-			uploadHandler(w, r)
+
+	// Create a wrapper that checks presigned URL first, then falls back to AppAuthMiddleware
+	secureUploadHandler := func(w http.ResponseWriter, r *http.Request) {
+		if auth.ValidatePresignedURL(r, secretKey) {
+			h.Upload(w, r)
 			return
 		}
-		if r.URL.Path == "/api/v1/files/bulk-upload" {
+		uploadHandler(w, r)
+	}
+
+	// Dynamic Bucket Routing
+	mux.HandleFunc("/api/v1/{bucket}/upload", secureUploadHandler)
+	mux.HandleFunc("/api/v1/{bucket}/bulk-upload", bulkUploadHandler)
+	mux.HandleFunc("/api/v1/{bucket}/view", h.ServeFileByRef)
+	mux.HandleFunc("/api/v1/{bucket}/", func(w http.ResponseWriter, r *http.Request) {
+		bucket := r.PathValue("bucket")
+		if r.URL.Path == "/api/v1/"+bucket+"/upload" {
+			secureUploadHandler(w, r)
+			return
+		}
+		if r.URL.Path == "/api/v1/"+bucket+"/bulk-upload" {
 			bulkUploadHandler(w, r)
 			return
 		}
-		if r.URL.Path == "/api/v1/files/view" {
+		if r.URL.Path == "/api/v1/"+bucket+"/view" {
 			h.ServeFileByRef(w, r)
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/api/v1/files/") {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/"+bucket+"/") {
 			if r.Method == http.MethodDelete {
 				h.DeleteFile(w, r)
 			} else {
@@ -143,7 +172,7 @@ func auditMiddleware(next http.Handler, secCfg *config.SecurityConfig, auditLogg
 		// Log if behind_proxy or in general for transparency
 		xff := r.Header.Get("X-Forwarded-For")
 		remoteAddr := r.RemoteAddr
-		
+
 		statusStr := "ignored: not in behind_proxy mode"
 		if secCfg.Mode == "behind_proxy" {
 			statusStr = "trusted"
@@ -152,7 +181,7 @@ func auditMiddleware(next http.Handler, secCfg *config.SecurityConfig, auditLogg
 		} else {
 			statusStr = "N/A"
 		}
-		
+
 		if auditLogger != nil {
 			xffLog := xff
 			if xff == "" {
@@ -160,7 +189,7 @@ func auditMiddleware(next http.Handler, secCfg *config.SecurityConfig, auditLogg
 			} else {
 				xffLog = xff + " (" + statusStr + ")"
 			}
-			
+
 			// We only record initial connection properties here.
 			// True authentication decisions might happen downstream,
 			// but this gives a guaranteed L7 trail for accepted sockets.

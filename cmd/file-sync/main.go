@@ -103,10 +103,11 @@ func main() {
 	defer auditLogger.Close()
 
 	// 6. Initialize HTTP API Server
-	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB)
+	// --- RESOLUSI KONFLIK: KITA GABUNGKAN PARAMETERNYA DI SINI ---
+	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
 	dashboardHandler := api.NewDashboardHandler(dashboardRepo, &cfg.Server, &cfg.Migration, &cfg.Storage, log)
 	explorerHandler := api.NewExplorerHandler(&cfg.Storage, &cfg.Migration, log)
-	router := api.NewRouter(handler, dashboardHandler, explorerHandler, &cfg.Server, &cfg.Security, auditLogger, log)
+	router := api.NewRouter(handler, dashboardHandler, explorerHandler, &cfg.Server, &cfg.Security, auditLogger, cfg.Auth.SecretKey, log)
 	httpServer := api.NewServer(&cfg.Server, &cfg.Security, auditLogger, router, log)
 
 	// Run HTTP Server in a separate goroutine
