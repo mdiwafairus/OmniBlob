@@ -160,7 +160,10 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 			}
 
 			// Migrate local file to sharded layout
-			newRelPath, checksum, size, err := s.storageRepo.MigrateLegacyFile(ctx, f.Module, legacyPath, f.Module, f.Directory, f.BinID, f.FileName, f.CreateDate)
+			// RESOLUSI: Menggunakan 8 parameter ("uploads" sebagai bucket dan f.Directory)
+			newRelPath, checksum, size, err := s.storageRepo.MigrateLegacyFile(
+				ctx, "uploads", legacyPath, f.Module, f.Directory, f.BinID, f.FileName, f.CreateDate,
+			)
 
 			if err != nil {
 				s.logger.Error().Err(err).Int64("bin_id", f.BinID).Str("path", legacyPath).Msg("Failed to migrate file (Skipping)")
@@ -214,4 +217,3 @@ func (s *MigrationService) runMigrationBatch(ctx context.Context) {
 		Int("active_workers", workers).
 		Msg("Batch migration completed successfully")
 }
-

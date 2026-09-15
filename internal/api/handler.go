@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"pwni-file-sync/internal/auth"
 	"pwni-file-sync/internal/entity"
 	"pwni-file-sync/internal/repository"
 	"pwni-file-sync/internal/storage"
@@ -18,10 +19,12 @@ import (
 )
 
 type Handler struct {
-	storageRepo *storage.StorageService
-	binaryRepo  repository.BinaryFileRepository
-	logger      zerolog.Logger
-	maxUploadMB int64
+	storageRepo  *storage.StorageService
+	binaryRepo   repository.BinaryFileRepository
+	logger       zerolog.Logger
+	maxUploadMB  int64
+	accessKey    string
+	secretKey    string
 }
 
 func NewHandler(
@@ -29,15 +32,19 @@ func NewHandler(
 	binaryRepo repository.BinaryFileRepository,
 	logger zerolog.Logger,
 	maxUploadMB int,
+	accessKey string,
+	secretKey string,
 ) *Handler {
 	if maxUploadMB <= 0 {
 		maxUploadMB = 100
 	}
 	return &Handler{
-		storageRepo: storageRepo,
-		binaryRepo:  binaryRepo,
-		logger:      logger,
-		maxUploadMB: int64(maxUploadMB),
+		storageRepo:  storageRepo,
+		binaryRepo:   binaryRepo,
+		logger:       logger,
+		maxUploadMB:  int64(maxUploadMB),
+		accessKey:    accessKey,
+		secretKey:    secretKey,
 	}
 }
 
@@ -61,6 +68,17 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, resp APIResponse)
 	_, _ = w.Write(data)
 }
 
+func getBucket(r *http.Request) string {
+	bucket := r.PathValue("bucket")
+	if bucket == "" {
+		bucket = r.Header.Get("X-Bucket")
+	}
+	if bucket == "" {
+		bucket = "files" // backward compatible physical folder
+	}
+	return bucket
+}
+
 // HealthCheck returns service & database health status.
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, APIResponse{
@@ -74,11 +92,6 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // Upload handles file upload from application servers.
-// Form Data parameters:
-// - file (multipart binary file)
-// - module (e.g. "lapordiri", "paspor", "skck")
-// - referensi_id (e.g. "LP-2026-001")
-// - directory (optional)
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.writeJSON(w, http.StatusMethodNotAllowed, APIResponse{
@@ -141,8 +154,10 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		customFileName = header.Filename
 	}
 
+	bucket := getBucket(r)
+
 	// 1. Stream file directly to storage & compute checksum
-	relPath, checksum, size, err := h.storageRepo.Save(r.Context(), module, customPath, module, directory, referensiID, 0, customFileName, file)
+	relPath, checksum, size, err := h.storageRepo.Save(r.Context(), bucket, customPath, module, directory, referensiID, 0, customFileName, file)
 	if err != nil {
 		h.logger.Error().Err(err).Str("file", customFileName).Msg("Failed to save file to storage")
 		h.writeJSON(w, http.StatusInternalServerError, APIResponse{
@@ -306,6 +321,63 @@ func (h *Handler) ServeFileByRef(w http.ResponseWriter, r *http.Request) {
 	h.ServeFileByID(w, r)
 }
 
+// --- 1. RESOLUSI FUNGSI GeneratePresignedURL ---
+
+// PresignRequest represents the request body for generating a presigned URL
+type PresignRequest struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+	Expiry int    `json:"expiry"` // in seconds
+}
+
+// GeneratePresignedURL generates a MinIO-style presigned URL
+func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.writeJSON(w, http.StatusMethodNotAllowed, APIResponse{Success: false, Error: "Method not allowed"})
+		return
+	}
+
+	var req PresignRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "Invalid JSON body"})
+		return
+	}
+
+	if req.Expiry <= 0 {
+		req.Expiry = 3600 // default 1 hour
+	}
+	if req.Method == "" {
+		req.Method = http.MethodGet
+	}
+	if req.Path == "" {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "path is required"})
+		return
+	}
+
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+
+	presigned, err := auth.GeneratePresignedURL(req.Method, baseURL, req.Path, h.accessKey, h.secretKey, time.Duration(req.Expiry)*time.Second)
+	if err != nil {
+		h.writeJSON(w, http.StatusInternalServerError, APIResponse{Success: false, Error: "Failed to generate presigned URL"})
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, APIResponse{
+		Success: true,
+		Data: map[string]string{
+			"presigned_url": presigned,
+			"expires_in":    fmt.Sprintf("%ds", req.Expiry),
+		},
+	})
+}
+
+
+// --- 2. RESOLUSI FUNGSI BulkUpload ---
+
 // BulkUpload handles multiple file uploads in a single request.
 func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -344,6 +416,8 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 		flagVal = "1"
 	}
 
+	bucket := getBucket(r)
+
 	type FileResult struct {
 		FileName string `json:"file_name"`
 		BinID    int64  `json:"bin_id,omitempty"`
@@ -360,7 +434,7 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		relPath, checksum, size, err := h.storageRepo.Save(r.Context(), module, "", module, directory, referensiID, 0, header.Filename, file)
+		relPath, checksum, size, err := h.storageRepo.Save(r.Context(), bucket, "", module, directory, referensiID, 0, header.Filename, file)
 		file.Close()
 
 		if err != nil {
@@ -400,16 +474,21 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			FileName: header.Filename,
 			BinID:    binID,
 			Path:     relPath,
-			URL:      fmt.Sprintf("/api/v1/%%s/%%d", module, binID),
+			// MENGHILANGKAN BUG KOMPILASI %%s/%%d MENJADI %s/%d
+			URL:      fmt.Sprintf("/api/v1/%s/%d", module, binID),
 		})
 	}
 
 	h.writeJSON(w, http.StatusOK, APIResponse{
 		Success: true,
-		Message: fmt.Sprintf("Processed %%d files", len(results)),
+		// MENGHILANGKAN BUG KOMPILASI %%d MENJADI %d
+		Message: fmt.Sprintf("Processed %d files", len(results)),
 		Data:    results,
 	})
 }
+
+
+// --- 3. RESOLUSI FUNGSI DeleteFile ---
 
 func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
