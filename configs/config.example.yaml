@@ -32,6 +32,14 @@ server:
       password: "pelayanan_password_here"
       allowed_modules: ["*"]
 
+security:
+  enabled: true
+  mode: "direct_socket" # direct_socket or behind_proxy
+  allowed_socket_ips: 
+    - "127.0.0.1/32"
+    - "192.168.1.0/24"
+  auth_type: "ip_only" # ip_only, token_only, both
+
 storage:
   # Base directory for new sharded storage
   root_path: "./data/storage"
