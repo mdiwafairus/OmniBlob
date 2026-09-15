@@ -83,7 +83,7 @@ func getBucket(r *http.Request) string {
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, APIResponse{
 		Success: true,
-		Message: "pwni-file-sync service is healthy and running",
+		Message: "omniBlob service is healthy and running",
 		Data: map[string]interface{}{
 			"status":    "UP",
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
@@ -92,11 +92,6 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // Upload handles file upload from application servers.
-// Form Data parameters:
-// - file (multipart binary file)
-// - module (e.g. "lapordiri", "paspor", "skck")
-// - referensi_id (e.g. "LP-2026-001")
-// - directory (optional)
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.writeJSON(w, http.StatusMethodNotAllowed, APIResponse{
@@ -205,6 +200,10 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Add metadata sidecar for data recovery (Orphaned Data Prevention)
+	destAbsPath := filepath.Join(h.storageRepo.RootPath(), filepath.FromSlash(relPath))
+	_ = h.storageRepo.SaveMetadataSidecar(destAbsPath, *binaryRecord)
 
 	appName := "anonymous"
 	if client := GetClientFromContext(r.Context()); client != nil {
@@ -322,6 +321,8 @@ func (h *Handler) ServeFileByRef(w http.ResponseWriter, r *http.Request) {
 	h.ServeFileByID(w, r)
 }
 
+// --- 1. RESOLUSI FUNGSI GeneratePresignedURL ---
+
 // PresignRequest represents the request body for generating a presigned URL
 type PresignRequest struct {
 	Method string `json:"method"`
@@ -372,4 +373,149 @@ func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
 			"expires_in":    fmt.Sprintf("%ds", req.Expiry),
 		},
 	})
+}
+
+
+// --- 2. RESOLUSI FUNGSI BulkUpload ---
+
+// BulkUpload handles multiple file uploads in a single request.
+func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.writeJSON(w, http.StatusMethodNotAllowed, APIResponse{Success: false, Error: "Method not allowed"})
+		return
+	}
+
+	maxBytes := h.maxUploadMB << 20
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+
+	if err := r.ParseMultipartForm(maxBytes); err != nil {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to parse multipart form: %v", err),
+		})
+		return
+	}
+
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
+		files = r.MultipartForm.File["file"] // fallback
+	}
+	if len(files) == 0 {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "Missing files"})
+		return
+	}
+
+	module := strings.TrimSpace(r.FormValue("module"))
+	if module == "" {
+		module = "general"
+	}
+	referensiID := strings.TrimSpace(r.FormValue("referensi_id"))
+	directory := strings.TrimSpace(r.FormValue("directory"))
+	flagVal := strings.TrimSpace(r.FormValue("flag"))
+	if flagVal == "" {
+		flagVal = "1"
+	}
+
+	bucket := getBucket(r)
+
+	type FileResult struct {
+		FileName string `json:"file_name"`
+		BinID    int64  `json:"bin_id,omitempty"`
+		Path     string `json:"path,omitempty"`
+		URL      string `json:"url,omitempty"`
+		Error    string `json:"error,omitempty"`
+	}
+	var results []FileResult
+
+	for _, header := range files {
+		file, err := header.Open()
+		if err != nil {
+			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
+			continue
+		}
+
+		relPath, checksum, size, err := h.storageRepo.Save(r.Context(), bucket, "", module, directory, referensiID, 0, header.Filename, file)
+		file.Close()
+
+		if err != nil {
+			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
+			continue
+		}
+
+		mimeType := header.Header.Get("Content-Type")
+		if mimeType == "" || mimeType == "application/octet-stream" {
+			mimeType = "application/octet-stream"
+		}
+
+		binaryRecord := &entity.BinaryFile{
+			ReferensiID: referensiID,
+			Module:      module,
+			Directory:   directory,
+			FileName:    header.Filename,
+			Path:        relPath,
+			Size:        size,
+			MimeType:    mimeType,
+			Checksum:    checksum,
+			Flag:        flagVal,
+			CreateDate:  time.Now(),
+		}
+
+		binID, err := h.binaryRepo.Insert(r.Context(), binaryRecord)
+		if err != nil {
+			results = append(results, FileResult{FileName: header.Filename, Error: err.Error()})
+			continue
+		}
+
+		// Add metadata sidecar
+		destAbsPath := filepath.Join(h.storageRepo.RootPath(), filepath.FromSlash(relPath))
+		_ = h.storageRepo.SaveMetadataSidecar(destAbsPath, *binaryRecord)
+
+		results = append(results, FileResult{
+			FileName: header.Filename,
+			BinID:    binID,
+			Path:     relPath,
+			// MENGHILANGKAN BUG KOMPILASI %%s/%%d MENJADI %s/%d
+			URL:      fmt.Sprintf("/api/v1/%s/%d", module, binID),
+		})
+	}
+
+	h.writeJSON(w, http.StatusOK, APIResponse{
+		Success: true,
+		// MENGHILANGKAN BUG KOMPILASI %%d MENJADI %d
+		Message: fmt.Sprintf("Processed %d files", len(results)),
+		Data:    results,
+	})
+}
+
+
+// --- 3. RESOLUSI FUNGSI DeleteFile ---
+
+func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) < 4 {
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "Missing file ID in URL path"})
+		return
+	}
+
+	idStr := pathParts[3]
+	var fileMeta *entity.BinaryFile
+	binID, err := strconv.ParseInt(idStr, 10, 64)
+	if err == nil {
+		fileMeta, err = h.binaryRepo.GetByID(r.Context(), binID)
+	} else {
+		fileMeta, err = h.binaryRepo.GetByFileName(r.Context(), idStr)
+	}
+
+	if err != nil || fileMeta == nil {
+		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found in database index"})
+		return
+	}
+
+	// Delete from storage
+	err = h.storageRepo.Delete(r.Context(), fileMeta.Path)
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("Failed to delete physical file, might already be deleted or missing")
+	}
+
+	h.writeJSON(w, http.StatusOK, APIResponse{Success: true, Message: "File deleted successfully"})
 }
