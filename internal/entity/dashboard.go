@@ -6,8 +6,19 @@ type DashboardSummary struct {
 	TotalPendingFiles         int64   `json:"total_pending_files"`
 	OverallProgressPercent    float64 `json:"overall_progress_percent"`
 	LiveTransferRateMBps      float64 `json:"live_transfer_rate_mbps"`
-	CurrentLatencyMs          float64 `json:"current_latency_ms"` // For future benchmark
+	CurrentLatencyMs          float64 `json:"current_latency_ms"`
 	DestinationFreeSpaceBytes uint64  `json:"destination_free_space_bytes"`
+
+	StaleFilesOver1Year int64    `json:"stale_files_over_1_year"`
+	MigrationEnabled    bool     `json:"migration_enabled"`
+	VmTotalBytes        uint64   `json:"vm_total_bytes"`
+	VmUsedBytes         uint64   `json:"vm_used_bytes"`
+	VmFreeBytes         uint64   `json:"vm_free_bytes"`
+	VmUsedPercent       float64  `json:"vm_used_percent"`
+	RootPath            string   `json:"root_path"`
+	LegacyPath          string   `json:"legacy_path"`
+	ShardingType        string   `json:"sharding_type"`
+	Clients             []string `json:"clients"`
 }
 
 type MigrationStats struct {

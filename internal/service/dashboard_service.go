@@ -50,6 +50,17 @@ func (s *DashboardService) GetExecutiveSummary(ctx context.Context, destPath str
 		LiveTransferRateMBps:      liveTransferRate,
 		CurrentLatencyMs:          currentLatencyMs,
 		DestinationFreeSpaceBytes: freeSpace,
+		
+		StaleFilesOver1Year: 0,
+		MigrationEnabled:    true,
+		VmTotalBytes:        1000000000000, // 1TB dummy
+		VmUsedBytes:         500000000000,
+		VmFreeBytes:         500000000000,
+		VmUsedPercent:       50.0,
+		RootPath:            "/data",
+		LegacyPath:          "/legacy",
+		ShardingType:        "date-based",
+		Clients:             []string{"App1", "App2"},
 	}
 
 	return summary, nil
