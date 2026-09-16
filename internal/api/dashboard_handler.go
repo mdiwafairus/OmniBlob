@@ -4,24 +4,31 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"pwni-file-sync/internal/config"
 	"pwni-file-sync/internal/service"
 )
 
 type DashboardHandler struct {
 	dashboardService *service.DashboardService
+	storageConfig    *config.StorageConfig
+	clients          []string
 }
 
-func NewDashboardHandler(dashboardService *service.DashboardService) *DashboardHandler {
+func NewDashboardHandler(dashboardService *service.DashboardService, storageConfig *config.StorageConfig, clients []string) *DashboardHandler {
 	return &DashboardHandler{
 		dashboardService: dashboardService,
+		storageConfig:    storageConfig,
+		clients:          clients,
 	}
 }
 
 func (h *DashboardHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
-	// Panggil service untuk mendapatkan summary
-	// Hardcode "C:\\" for now as destination path to check free space, 
-	// ideally we take this from config
-	summary, err := h.dashboardService.GetExecutiveSummary(r.Context(), "C:\\")
+	destPath := h.storageConfig.RootPath
+	if destPath == "" {
+		destPath = "C:\\"
+	}
+
+	summary, err := h.dashboardService.GetExecutiveSummary(r.Context(), destPath, h.clients)
 	if err != nil {
 		http.Error(w, "Failed to get dashboard summary: "+err.Error(), http.StatusInternalServerError)
 		return

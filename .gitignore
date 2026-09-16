@@ -21,6 +21,10 @@ pwni-file-sync.exe
 *.key
 *.cert
 *.crt
+keys.txt
+test.license
+*.license
+*_watermark.json
 
 # Ignore actual configuration file with database credentials
 configs/config.yaml

@@ -357,3 +357,113 @@ func (r *binaryFileRepository) ExistsByPath(ctx context.Context, path string) (b
 	return exists, nil
 }
 
+
+
+func (r *binaryFileRepository) GetModuleStats(ctx context.Context) ([]entity.ModuleStat, error) {
+	query := `
+		SELECT 
+			COALESCE(NULLIF(module, ''), 'unknown') as mod,
+			COUNT(*) as count,
+			COALESCE(SUM(size), 0) as size_bytes
+		FROM binary_file
+		GROUP BY mod
+		ORDER BY size_bytes DESC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var stats []entity.ModuleStat
+	for rows.Next() {
+		var s entity.ModuleStat
+		if err := rows.Scan(&s.Module, &s.Count, &s.SizeBytes); err != nil { return nil, err }
+		stats = append(stats, s)
+	}
+	return stats, nil
+}
+
+func (r *binaryFileRepository) GetYearlyStats(ctx context.Context) ([]entity.YearStat, error) {
+	query := `
+		SELECT 
+			EXTRACT(YEAR FROM create_date) as year,
+			COUNT(*) as count,
+			COALESCE(SUM(size), 0) as size_bytes
+		FROM binary_file
+		WHERE create_date IS NOT NULL
+		GROUP BY year
+		ORDER BY year ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var stats []entity.YearStat
+	for rows.Next() {
+		var s entity.YearStat
+		if err := rows.Scan(&s.Year, &s.Count, &s.SizeBytes); err != nil { return nil, err }
+		stats = append(stats, s)
+	}
+	return stats, nil
+}
+
+func (r *binaryFileRepository) GetMonthlyStats(ctx context.Context) ([]entity.MonthlyStat, error) {
+	query := `
+		SELECT 
+			EXTRACT(YEAR FROM create_date) as year,
+			EXTRACT(MONTH FROM create_date) as month,
+			COUNT(*) as count,
+			COALESCE(SUM(size), 0) as size_bytes
+		FROM binary_file
+		WHERE create_date IS NOT NULL
+		GROUP BY year, month
+		ORDER BY year ASC, month ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var stats []entity.MonthlyStat
+	for rows.Next() {
+		var s entity.MonthlyStat
+		if err := rows.Scan(&s.Year, &s.Month, &s.Count, &s.SizeBytes); err != nil { return nil, err }
+		stats = append(stats, s)
+	}
+	return stats, nil
+}
+
+func (r *binaryFileRepository) GetJobHistory(ctx context.Context, clientID string) ([]entity.JobHistory, int64, error) {
+	var totalJobs int64
+	var history []entity.JobHistory
+
+	countQuery := "SELECT COUNT(*) FROM log_file_rsync"
+	err := r.db.QueryRow(ctx, countQuery).Scan(&totalJobs)
+	if err != nil { return []entity.JobHistory{}, 0, nil }
+
+	query := `
+		SELECT 
+			id::VARCHAR, 
+			'Background Migration' as name, 
+			'Migrasi' as type, 
+			0 as volume_bytes, 
+			TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as date, 
+			CASE WHEN error_logs IS NULL OR error_logs = '' THEN 'Success' ELSE 'Failed' END as status
+		FROM log_file_rsync
+		ORDER BY id DESC LIMIT 20
+	
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil { return []entity.JobHistory{}, 0, nil }
+	defer rows.Close()
+
+	for rows.Next() {
+		var j entity.JobHistory
+		if err := rows.Scan(&j.ID, &j.Name, &j.Type, &j.VolumeBytes, &j.Date, &j.Status); err != nil { return nil, 0, err }
+		
+		j.Duration = "< 1m"
+		history = append(history, j)
+	}
+	
+	if history == nil { history = []entity.JobHistory{} }
+	
+	return history, totalJobs, nil
+}

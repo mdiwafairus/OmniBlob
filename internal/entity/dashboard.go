@@ -17,14 +17,17 @@ type DashboardSummary struct {
 	VmUsedPercent       float64  `json:"vm_used_percent"`
 	RootPath            string   `json:"root_path"`
 	LegacyPath          string   `json:"legacy_path"`
-	ShardingType        string   `json:"sharding_type"`
-	Clients             []string `json:"clients"`
+	ShardingType        string       `json:"sharding_type"`
+	Clients             []string     `json:"clients"`
+	TotalLifetimeMigrations int64    `json:"total_lifetime_migrations"`
+	MigrationHistory    []JobHistory `json:"migration_history"`
 }
 
 type MigrationStats struct {
 	TotalFiles         int64
 	MigratedFiles      int64
 	TotalMigratedBytes int64
+	StaleFiles         int64
 }
 
 type ExtensionStat struct {
@@ -44,6 +47,38 @@ type LargeFile struct {
 type StorageAnalytics struct {
 	ExtensionStats []ExtensionStat `json:"extension_stats"`
 	TopLargeFiles  []LargeFile     `json:"top_large_files"`
+	ModuleStats    []ModuleStat    `json:"module_stats"`
+	YearlyStats    []YearStat      `json:"yearly_stats"`
+	MonthlyStats   []MonthlyStat   `json:"monthly_stats"`
+}
+
+type ModuleStat struct {
+	Module    string `json:"module"`
+	Count     int64  `json:"count"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+type YearStat struct {
+	Year      int    `json:"year"`
+	Count     int64  `json:"count"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+type MonthlyStat struct {
+	Year      int   `json:"year"`
+	Month     int   `json:"month"`
+	Count     int64 `json:"count"`
+	SizeBytes int64 `json:"size_bytes"`
+}
+
+type JobHistory struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	VolumeBytes int64  `json:"volume_bytes"`
+	Date        string `json:"date"`
+	Duration    string `json:"duration"`
+	Status      string `json:"status"`
 }
 
 type DuplicateGroup struct {

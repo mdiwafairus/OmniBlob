@@ -7,7 +7,7 @@ import (
 	"pwni-file-sync/internal/entity"
 	"pwni-file-sync/internal/repository"
 
-	"golang.org/x/sys/windows"
+	"github.com/shirou/gopsutil/v3/disk"
 )
 
 type DashboardService struct {
@@ -22,7 +22,7 @@ func NewDashboardService(binaryRepo repository.BinaryFileRepository, logRepo rep
 	}
 }
 
-func (s *DashboardService) GetExecutiveSummary(ctx context.Context, destPath string) (*entity.DashboardSummary, error) {
+func (s *DashboardService) GetExecutiveSummary(ctx context.Context, destPath string, clients []string) (*entity.DashboardSummary, error) {
 	stats, err := s.binaryRepo.GetMigrationStats(ctx)
 	if err != nil {
 		return nil, err
@@ -31,16 +31,18 @@ func (s *DashboardService) GetExecutiveSummary(ctx context.Context, destPath str
 	var progress float64
 	if stats.TotalFiles > 0 {
 		progress = float64(stats.MigratedFiles) / float64(stats.TotalFiles) * 100.0
-		// Round to 2 decimal places
 		progress = math.Round(progress*100) / 100
 	}
 
-	freeSpace := s.getFreeDiskSpace(destPath)
+	freeSpace, totalSpace, usedSpace, usedPercent := s.getDiskSpaceStats(destPath)
 
-	// In a real scenario, we would calculate this based on recent log_file_rsync entries
-	// For MVP/Placeholder, we can set 0 until the worker starts pushing latency metrics
 	var liveTransferRate float64 = 0
 	var currentLatencyMs float64 = 0
+
+	jobHistory, totalJobs, err := s.binaryRepo.GetJobHistory(ctx, "")
+	if err != nil {
+		jobHistory = []entity.JobHistory{}
+	}
 
 	summary := &entity.DashboardSummary{
 		TotalDataMigratedBytes:    stats.TotalMigratedBytes,
@@ -51,16 +53,18 @@ func (s *DashboardService) GetExecutiveSummary(ctx context.Context, destPath str
 		CurrentLatencyMs:          currentLatencyMs,
 		DestinationFreeSpaceBytes: freeSpace,
 		
-		StaleFilesOver1Year: 0,
+		StaleFilesOver1Year: stats.StaleFiles,
 		MigrationEnabled:    true,
-		VmTotalBytes:        1000000000000, // 1TB dummy
-		VmUsedBytes:         500000000000,
-		VmFreeBytes:         500000000000,
-		VmUsedPercent:       50.0,
-		RootPath:            "/data",
+		VmTotalBytes:        totalSpace,
+		VmUsedBytes:         usedSpace,
+		VmFreeBytes:         freeSpace,
+		VmUsedPercent:       usedPercent,
+		RootPath:            destPath,
 		LegacyPath:          "/legacy",
 		ShardingType:        "date-based",
-		Clients:             []string{"App1", "App2"},
+		Clients:             clients,
+		TotalLifetimeMigrations: totalJobs,
+		MigrationHistory:    jobHistory,
 	}
 
 	return summary, nil
@@ -76,10 +80,28 @@ func (s *DashboardService) GetStorageAnalytics(ctx context.Context) (*entity.Sto
 	if err != nil {
 		return nil, err
 	}
+	
+	modStats, err := s.binaryRepo.GetModuleStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	yStats, err := s.binaryRepo.GetYearlyStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	mStats, err := s.binaryRepo.GetMonthlyStats(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	return &entity.StorageAnalytics{
 		ExtensionStats: extStats,
 		TopLargeFiles:  topFiles,
+		ModuleStats:    modStats,
+		YearlyStats:    yStats,
+		MonthlyStats:   mStats,
 	}, nil
 }
 
@@ -87,25 +109,17 @@ func (s *DashboardService) GetDataQualityStats(ctx context.Context) (*entity.Dat
 	return s.binaryRepo.GetDataQualityStats(ctx)
 }
 
-// getFreeDiskSpace gets the free disk space for a given path on Windows.
-// For production, you might want to switch between syscalls depending on the OS (using build tags).
-func (s *DashboardService) getFreeDiskSpace(path string) uint64 {
+// getDiskSpaceStats gets the disk space stats for a given path across platforms.
+func (s *DashboardService) getDiskSpaceStats(path string) (free uint64, total uint64, used uint64, percent float64) {
 	if path == "" {
-		path = "C:\\"
+		path = "/"
 	}
 	
-	// Convert path to UTF16 pointer for Windows API
-	pathPtr, err := windows.UTF16PtrFromString(path)
+	usageStat, err := disk.Usage(path)
 	if err != nil {
-		return 0
+		// Fallback safely if path error occurs
+		return 0, 0, 0, 0
 	}
 	
-	var freeBytesAvailableToCaller, totalNumberOfBytes, totalNumberOfFreeBytes uint64
-	
-	err = windows.GetDiskFreeSpaceEx(pathPtr, &freeBytesAvailableToCaller, &totalNumberOfBytes, &totalNumberOfFreeBytes)
-	if err != nil {
-		return 0
-	}
-	
-	return freeBytesAvailableToCaller
+	return usageStat.Free, usageStat.Total, usageStat.Used, usageStat.UsedPercent
 }

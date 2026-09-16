@@ -16,8 +16,12 @@ type BinaryFileRepository interface {
 	GetMigrationStats(ctx context.Context) (*entity.MigrationStats, error)
 	GetExtensionStats(ctx context.Context) ([]entity.ExtensionStat, error)
 	GetTopLargeFiles(ctx context.Context, limit int) ([]entity.LargeFile, error)
+	GetModuleStats(ctx context.Context) ([]entity.ModuleStat, error)
+	GetYearlyStats(ctx context.Context) ([]entity.YearStat, error)
+	GetMonthlyStats(ctx context.Context) ([]entity.MonthlyStat, error)
 	GetDataQualityStats(ctx context.Context) (*entity.DataQualityStats, error)
 	ExistsByPath(ctx context.Context, path string) (bool, error)
+	GetJobHistory(ctx context.Context, clientID string) ([]entity.JobHistory, int64, error)
 }
 
 type LogRepository interface {

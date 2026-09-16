@@ -105,7 +105,12 @@ func main() {
 	// 6. Initialize HTTP API Server (MERGE CONFLICT RESOLVED)
 	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Server.AllowedExtensions, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
 	dashboardService := service.NewDashboardService(binaryRepo, logRepo)
-	dashboardHandler := api.NewDashboardHandler(dashboardService)
+	
+	var clientNames []string
+	for _, client := range cfg.Server.Clients {
+		clientNames = append(clientNames, client.Name)
+	}
+	dashboardHandler := api.NewDashboardHandler(dashboardService, &cfg.Storage, clientNames)
 	explorerHandler := api.NewExplorerHandler(&cfg.Storage, &cfg.Migration, log)
 	
 	router := api.NewRouter(handler, dashboardHandler, explorerHandler, &cfg.Server, &cfg.Security, auditLogger, cfg.Auth.SecretKey, log, dbPool)

@@ -5,14 +5,14 @@ go 1.24.0
 toolchain go1.24.2
 
 require (
+	github.com/gibson042/canonicaljson-go v1.0.3
 	github.com/jackc/pgx/v4 v4.15.0
 	github.com/rs/zerolog v1.35.1
-	golang.org/x/sys v0.29.0
+	github.com/shirou/gopsutil/v3 v3.24.5
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/gibson042/canonicaljson-go v1.0.3 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.11.0 // indirect
@@ -25,9 +25,9 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 )
