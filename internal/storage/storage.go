@@ -239,7 +239,6 @@ func (s *StorageService) MigrateLegacyFile(ctx context.Context, bucket string, l
 		checksum, _ := fileutil.SHA256FromFile(destAbsPath)
 		return destRelPath, checksum, destInfo.Size(), nil
 	}
-
 	destFile, err := os.Create(destAbsPath)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("create dest: %w", err)
