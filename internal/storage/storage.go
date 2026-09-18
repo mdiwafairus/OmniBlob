@@ -273,4 +273,3 @@ func (s *StorageService) Delete(ctx context.Context, relOrFullPath string) error
 }
 
 func (s *StorageService) RootPath() string { return s.rootPath }
-func (s *StorageService) SaveMetadataSidecar(destAbsPath string, metadata interface{}) error { metaPath := destAbsPath + ".meta.json"; data, err := encoding_json.MarshalIndent(metadata, "", "  "); if err != nil { return err }; return os.WriteFile(metaPath, data, 0644) }
