@@ -1,9 +1,0 @@
-﻿# Example Client / Job Configuration
-# You can copy client definitions to your main config.yaml
-
-clients:
-  - name: "finance-app"
-    api_key: "finance_secret_key"
-    user: "finance_app"
-    password: "finance_password"
-    allowed_modules: ["finance", "invoices"]
