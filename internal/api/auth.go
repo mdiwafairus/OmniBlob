@@ -2,6 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
+	"fmt"
+	"github.com/go-ldap/ldap/v3"
+
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -36,6 +40,52 @@ func GetClientFromContext(ctx context.Context) *ClientInfo {
 }
 
 // AppAuthMiddleware provides per-application authentication.
+
+func authenticateLDAP(cfg *config.LDAPConfig, username, password string) bool {
+	if username == "" || password == "" {
+		return false
+	}
+	
+	var l *ldap.Conn
+	var err error
+	
+	if cfg.UseTLS {
+		tlsConfig := &tls.Config{InsecureSkipVerify: cfg.SkipVerify}
+		l, err = ldap.DialTLS("tcp", cfg.ServerAddr, tlsConfig)
+	} else {
+		l, err = ldap.Dial("tcp", cfg.ServerAddr)
+	}
+	
+	if err != nil {
+		return false
+	}
+	defer l.Close()
+
+	if cfg.BindDN != "" && cfg.BindPassword != "" {
+		err = l.Bind(cfg.BindDN, cfg.BindPassword)
+		if err != nil {
+			return false
+		}
+	}
+
+	searchRequest := ldap.NewSearchRequest(
+		cfg.BaseDN,
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf(cfg.UserFilter, ldap.EscapeFilter(username)),
+		[]string{"dn"},
+		nil,
+	)
+
+	sr, err := l.Search(searchRequest)
+	if err != nil || len(sr.Entries) == 0 {
+		return false
+	}
+
+	userDN := sr.Entries[0].DN
+	err = l.Bind(userDN, password)
+	return err == nil
+}
+
 func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, dbPool *pgxpool.Pool, next http.HandlerFunc) http.HandlerFunc {
 	suspectLogger := logger.NewSuspectLogger()
 
@@ -91,7 +141,12 @@ func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, dbPool *pgx
 		// Strategy 2: Check HTTP Basic Auth (user:password)
 		if matchedClient == nil {
 			if user, pass, ok := r.BasicAuth(); ok {
-				matchedClient = userPassToClient[user+":"+pass]
+				// Check LDAP First if enabled
+				if cfg.LDAP.Enabled && authenticateLDAP(&cfg.LDAP, user, pass) {
+					matchedClient = &ClientInfo{Name: "ldap-user", User: user, AllowedModules: []string{"*"}}
+				} else {
+					matchedClient = userPassToClient[user+":"+pass]
+				}
 			}
 		}
 
@@ -100,7 +155,11 @@ func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, dbPool *pgx
 			user := strings.TrimSpace(r.Header.Get("X-API-USER"))
 			pass := strings.TrimSpace(r.Header.Get("X-API-PASS"))
 			if user != "" && pass != "" {
-				matchedClient = userPassToClient[user+":"+pass]
+				if cfg.LDAP.Enabled && authenticateLDAP(&cfg.LDAP, user, pass) {
+					matchedClient = &ClientInfo{Name: "ldap-user", User: user, AllowedModules: []string{"*"}}
+				} else {
+					matchedClient = userPassToClient[user+":"+pass]
+				}
 			}
 		}
 

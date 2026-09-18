@@ -54,3 +54,21 @@ This commit resolves several compilation errors and missing implementations caus
 # 2	test.license	🔴 DITEMUKAN	JSON	🔓 License Keys (ED25519 signatures)
 # 3	audit_watermark.json	🟡 FOUND	JSON	⚠️ Mungkin internal tracking
 # 4	omni_watermark.json	🟡 FOUND	JSON	⚠️ Mungkin internal tracking
+
+
+# # Hapus credential dan state yang sudah terlanjur tracked
+# git rm keys.txt
+# git rm collection/env.ombiblob.json
+# git rm audit_watermark.json omni_watermark.json
+
+# # Hapus dependency npm dari Git, tetapi tetap biarkan lokal
+# git rm -r --cached dashboard/node_modules
+
+# # Jika dist tidak ingin disimpan
+# git rm -r --cached dashboard/dist
+
+# # Tambahkan perubahan
+# git add .gitignore
+
+# # Commit
+# git commit -m "Remove secrets and generated files from repository"

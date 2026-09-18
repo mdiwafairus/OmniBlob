@@ -25,6 +25,19 @@ type AuthConfig struct {
 }
 
 
+type LDAPConfig struct {
+	Enabled           bool   `yaml:"enabled" mapstructure:"enabled"`
+	ServerAddr        string `yaml:"server_addr" mapstructure:"server_addr"`
+	UseTLS            bool   `yaml:"use_tls" mapstructure:"use_tls"`
+	SkipVerify        bool   `yaml:"skip_verify" mapstructure:"skip_verify"`
+	BaseDN            string `yaml:"base_dn" mapstructure:"base_dn"`
+	BindDN            string `yaml:"bind_dn" mapstructure:"bind_dn"`
+	BindPassword      string `yaml:"bind_password" mapstructure:"bind_password"`
+	UserFilter        string `yaml:"user_filter" mapstructure:"user_filter"`
+	GroupSearchBaseDN string `yaml:"group_search_base_dn" mapstructure:"group_search_base_dn"`
+	GroupSearchFilter string `yaml:"group_search_filter" mapstructure:"group_search_filter"`
+}
+
 type ClientConfig struct {
 	Name           string   `yaml:"name" mapstructure:"name"`
 	ApiKey         string   `yaml:"api_key" mapstructure:"api_key"`
@@ -45,6 +58,7 @@ type ServerConfig struct {
 	ApiPass         string         `yaml:"api_pass" mapstructure:"api_pass"`
 	AllowedExtensions []string       `yaml:"allowed_extensions" mapstructure:"allowed_extensions"`
 	RateLimitRPM      int            `yaml:"rate_limit_rpm" mapstructure:"rate_limit_rpm"`
+	LDAP              LDAPConfig     `yaml:"ldap" mapstructure:"ldap"`
 	Clients           []ClientConfig `yaml:"clients" mapstructure:"clients"`
 }
 
