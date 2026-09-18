@@ -2,12 +2,10 @@ package service
 
 import (
 	"context"
-	"path/filepath"
 	"time"
 
 	"pwni-file-sync/internal/config"
 	"pwni-file-sync/internal/repository"
-	"pwni-file-sync/pkg/fileutil"
 
 	"github.com/rs/zerolog"
 )
