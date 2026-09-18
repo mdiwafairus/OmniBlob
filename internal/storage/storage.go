@@ -273,3 +273,5 @@ func (s *StorageService) Delete(ctx context.Context, relOrFullPath string) error
 }
 
 func (s *StorageService) RootPath() string { return s.rootPath }
+f u n c   ( s   * S t o r a g e S e r v i c e )   S a v e M e t a d a t a S i d e c a r ( d e s t A b s P a t h   s t r i n g ,   m e t a d a t a   i n t e r f a c e { } )   e r r o r   {   m e t a P a t h   : =   d e s t A b s P a t h   +   " . m e t a . j s o n " ;   d a t a ,   e r r   : =   e n c o d i n g _ j s o n . M a r s h a l I n d e n t ( m e t a d a t a ,   " " ,   "     " ) ;   i f   e r r   ! =   n i l   {   r e t u r n   e r r   } ;   r e t u r n   o s . W r i t e F i l e ( m e t a P a t h ,   d a t a ,   0 6 4 4 )   }  
+ 
