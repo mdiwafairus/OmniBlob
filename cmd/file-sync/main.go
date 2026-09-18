@@ -102,6 +102,10 @@ func main() {
 	}
 	defer auditLogger.Close()
 
+	// Start Background Reconciliation Worker (checking DB checksum vs physical file)
+	reconciliationService := service.NewReconciliationService(&cfg.Reconciliation, &cfg.Storage, binaryRepo, log)
+	go reconciliationService.StartBackgroundReconciliation(ctx)
+
 	// 6. Initialize HTTP API Server (MERGE CONFLICT RESOLVED)
 	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Server.AllowedExtensions, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
 	dashboardService := service.NewDashboardService(binaryRepo, logRepo)

@@ -157,6 +157,7 @@ func NewRouter(
 	// Wrap with Middlewares
 	var handler http.Handler = mux
 	handler = auditMiddleware(handler, secCfg, auditLogger)
+	handler = rateLimitMiddleware(cfg)(handler)
 	handler = corsMiddleware(handler)
 	handler = loggingMiddleware(handler, log)
 	handler = recoveryMiddleware(handler, log)

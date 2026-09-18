@@ -1,0 +1,56 @@
+git commit -m "fix: resolve complex merge conflicts and broken builds 
+This commit resolves several compilation errors and missing implementations caused by conflicting PR merges across multiple feature branches.Key fixes include:
+- Auto-Discovery: Added the missing 'Directory' parameter to MigrateLegacyFile.
+- Quarantine: Restored 'ExistsByPath' to BinaryFileRepository.
+- IP Whitelist: Fixed NewSuspectLogger and restored WhitelistIPs/Security configs.
+- Presigned URL: Re-implemented GeneratePresignedURL in handler.go.
+- Dashboard: Corrected routing method calls (GetSummary, GetAnalytics, GetQuality).
+- Bugfix: Fixed invalid string formatting in API responses."
+
+
+# git clone https://github.com/mdiwafairus/OmniBlob.git && cd OmniBlob
+# git checkout main
+# rm -f keys.txt test.license audit_watermark.json omni_watermark.json
+# echo -e "\n# Sensitive files\nkeys.txt\ntest.license\n*.license\n*_watermark.json" >> .gitignore
+# git add -A
+# git commit -m "chore: remove sensitive files and update gitignore"
+# git push origin main
+
+
+
+# # Tambah ke .gitignore
+# cat >> .gitignore << 'EOF'
+
+# # Sensitive files
+# keys.txt
+# test.license
+# *.license
+# *_watermark.json
+# .env
+# .env.local
+# .secrets
+# EOF
+
+# git add .gitignore
+# git commit -m "chore: update gitignore to prevent sensitive files"
+# git push origin main
+
+
+# Hapus dari repository history menggunakan git-filter-branch
+# git clone https://github.com/mdiwafairus/OmniBlob.git
+# cd OmniBlob
+
+# Hapus file dari semua history
+# git filter-branch --tree-filter 'rm -f keys.txt test.license audit_watermark.json omni_watermark.json' HEAD
+
+# Force push ke repository
+# git push origin --force --all
+
+# Force push tags jika ada
+# git push origin --force --tags
+
+#	File	Status	Tipe	Bahaya
+# 1	keys.txt	🔴 DITEMUKAN	Binary/Text	🔐 API Keys / Credentials
+# 2	test.license	🔴 DITEMUKAN	JSON	🔓 License Keys (ED25519 signatures)
+# 3	audit_watermark.json	🟡 FOUND	JSON	⚠️ Mungkin internal tracking
+# 4	omni_watermark.json	🟡 FOUND	JSON	⚠️ Mungkin internal tracking

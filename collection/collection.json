@@ -1,0 +1,283 @@
+{
+	"info": {
+		"name": "OmniBlob API - MVP 1",
+		"description": "Dokumentasi API untuk OmniBlob (pwni-file-sync) MVP 1 (Tanpa fitur Presigned URL).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"health"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Upload File",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "{{api_key}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": []
+						},
+						{
+							"key": "referensi_id",
+							"value": "{{referensi_id}}",
+							"description": "ID referensi unik dari aplikasi Anda (misal: UUID atau Nomor Transaksi)",
+							"type": "text"
+						},
+						{
+							"key": "module",
+							"value": "{{bucket}}",
+							"description": "Kategori / Modul aplikasi",
+							"type": "text"
+								},
+		{
+			"name": "5. Bulk Upload Files",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "{{api_key}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "files",
+							"type": "file",
+							"src": []
+						},
+						{
+							"key": "files",
+							"type": "file",
+							"src": []
+						},
+						{
+							"key": "referensi_id",
+							"value": "{{referensi_id}}",
+							"description": "ID referensi unik",
+							"type": "text"
+						},
+						{
+							"key": "module",
+							"value": "{{bucket}}",
+							"description": "Kategori / Modul aplikasi",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/files/bulk-upload",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"files",
+						"bulk-upload"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+},
+				"url": {
+					"raw": "{{base_url}}/api/v1/{{bucket}}/upload",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"{{bucket}}",
+						"upload"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Get File by Internal ID (bin_id)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/{{bucket}}/{{bin_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"{{bucket}}",
+						"{{bin_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "4. Get File by Reference ID",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/{{bucket}}/view?ref_id={{referensi_id}}&module={{bucket}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"{{bucket}}",
+						"view"
+					],
+					"query": [
+						{
+							"key": "ref_id",
+							"value": "{{referensi_id}}"
+						},
+						{
+							"key": "module",
+							"value": "{{bucket}}"
+								},
+		{
+			"name": "5. Bulk Upload Files",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "{{api_key}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "files",
+							"type": "file",
+							"src": []
+						},
+						{
+							"key": "files",
+							"type": "file",
+							"src": []
+						},
+						{
+							"key": "referensi_id",
+							"value": "{{referensi_id}}",
+							"description": "ID referensi unik",
+							"type": "text"
+						},
+						{
+							"key": "module",
+							"value": "{{bucket}}",
+							"description": "Kategori / Modul aplikasi",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/files/bulk-upload",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"files",
+						"bulk-upload"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
+			},
+			"response": []
+				},
+		{
+			"name": "5. Bulk Upload Files",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "{{api_key}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "files",
+							"type": "file",
+							"src": []
+						},
+						{
+							"key": "files",
+							"type": "file",
+							"src": []
+						},
+						{
+							"key": "referensi_id",
+							"value": "{{referensi_id}}",
+							"description": "ID referensi unik",
+							"type": "text"
+						},
+						{
+							"key": "module",
+							"value": "{{bucket}}",
+							"description": "Kategori / Modul aplikasi",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/files/bulk-upload",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"files",
+						"bulk-upload"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

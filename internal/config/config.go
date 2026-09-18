@@ -14,6 +14,7 @@ type Config struct {
 	Auth      AuthConfig      `yaml:"auth" mapstructure:"auth"`
 	Storage   StorageConfig   `yaml:"storage" mapstructure:"storage"`
 	Migration MigrationConfig `yaml:"migration" mapstructure:"migration"`
+	Reconciliation ReconciliationConfig `yaml:"reconciliation" mapstructure:"reconciliation"`
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
 	Security  SecurityConfig  `yaml:"security" mapstructure:"security"`
 }
@@ -42,8 +43,9 @@ type ServerConfig struct {
 	ApiKey          string         `yaml:"api_key" mapstructure:"api_key"`
 	ApiUser         string         `yaml:"api_user" mapstructure:"api_user"`
 	ApiPass         string         `yaml:"api_pass" mapstructure:"api_pass"`
-	AllowedExtensions []string     `yaml:"allowed_extensions" mapstructure:"allowed_extensions"`
-	Clients         []ClientConfig `yaml:"clients" mapstructure:"clients"`
+	AllowedExtensions []string       `yaml:"allowed_extensions" mapstructure:"allowed_extensions"`
+	RateLimitRPM      int            `yaml:"rate_limit_rpm" mapstructure:"rate_limit_rpm"`
+	Clients           []ClientConfig `yaml:"clients" mapstructure:"clients"`
 }
 
 type SecurityConfig struct {
@@ -64,6 +66,12 @@ type MigrationConfig struct {
 	BatchSize   int  `yaml:"batch_size" mapstructure:"batch_size"`
 	IntervalSec int  `yaml:"interval_sec" mapstructure:"interval_sec"`
 	WorkerCount int  `yaml:"worker_count" mapstructure:"worker_count"`
+}
+
+type ReconciliationConfig struct {
+	Enabled     bool `yaml:"enabled" mapstructure:"enabled"`
+	BatchSize   int  `yaml:"batch_size" mapstructure:"batch_size"`
+	IntervalSec int  `yaml:"interval_sec" mapstructure:"interval_sec"`
 }
 
 type DatabaseConfig struct {
@@ -158,6 +166,11 @@ func LoadConfig(path string) (*Config, error) {
 	if migrationEnabled := os.Getenv("MIGRATION_ENABLED"); migrationEnabled != "" {
 		if b, err := strconv.ParseBool(migrationEnabled); err == nil {
 			cfg.Migration.Enabled = b
+		}
+	}
+	if reconciliationEnabled := os.Getenv("RECONCILIATION_ENABLED"); reconciliationEnabled != "" {
+		if b, err := strconv.ParseBool(reconciliationEnabled); err == nil {
+			cfg.Reconciliation.Enabled = b
 		}
 	}
 

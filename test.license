@@ -1,0 +1,24 @@
+{
+  "payload": {
+    "key_id": "master-key-01",
+    "license_id": "lic-001",
+    "customer_id": "cust-omni-01",
+    "deployment_id": "dep-cloud-01",
+    "hardware_fingerprint": "hw-fingerprint-example",
+    "issued_at": "2026-09-08T22:45:49+07:00",
+    "not_before": "2026-09-08T22:45:49+07:00",
+    "expires_at": "2027-09-08T22:45:49+07:00",
+    "grace_period_days": 14,
+    "entitlements": {
+      "features": [
+        "advanced_analytics",
+        "sso"
+      ],
+      "quotas": {
+        "max_users": 50
+      },
+      "tier": "professional"
+    }
+  },
+  "signature": "6CFnZUnSfcAKdJTHOfzhAbVl7vQ9ai56K1eFRbcFR9AV8eg8R2Hrhxk+/GF8ogDcmepPiO1MAcbbpLLviAkSDA=="
+}

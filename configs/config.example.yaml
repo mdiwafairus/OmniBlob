@@ -6,6 +6,7 @@ server:
   read_timeout_sec: 30
   write_timeout_sec: 60
   max_upload_size_mb: 100
+  allowed_extensions: [".pdf", ".jpg", ".jpeg", ".png", ".docx"]
 
   # Global / Fallback Authentication
   api_key: "your_secret_api_key_here"
@@ -53,6 +54,11 @@ migration:
   batch_size: 100
   interval_sec: 10
   worker_count: 4
+
+reconciliation:
+  enabled: false
+  batch_size: 500
+  interval_sec: 3600 # Runs every hour
 
 database:
   host: "localhost"

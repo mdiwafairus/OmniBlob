@@ -40,12 +40,18 @@ func NewHandler(
 	if maxUploadMB <= 0 {
 		maxUploadMB = 100
 	}
+
+	exts := make([]string, 0, len(allowedExtensions))
+	for _, ext := range allowedExtensions {
+		exts = append(exts, strings.ToLower(strings.TrimSpace(ext)))
+	}
+
 	return &Handler{
 		storageRepo:       storageRepo,
 		binaryRepo:        binaryRepo,
 		logger:            logger,
 		maxUploadMB:       int64(maxUploadMB),
-		allowedExtensions: allowedExtensions,
+		allowedExtensions: exts,
 		accessKey:         accessKey,
 		secretKey:         secretKey,
 	}
