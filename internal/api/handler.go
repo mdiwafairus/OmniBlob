@@ -125,12 +125,85 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	module := strings.TrimSpace(r.FormValue("module"))
-	if module == "" {
-		module = strings.TrimSpace(r.FormValue("modul"))
+	// Extension Validation
+	if len(h.allowedExtensions) > 0 {
+		ext := strings.ToLower(filepath.Ext(header.Filename))
+		allowed := false
+		for _, validExt := range h.allowedExtensions {
+			if ext == validExt {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			h.writeJSON(w, http.StatusUnsupportedMediaType, APIResponse{
+				Success: false,
+				Error:   fmt.Sprintf("File extension %s is not allowed", ext),
+			})
+			return
+		}
+
+		// Magic Bytes / MIME Type Verification
+		// Read first 512 bytes for sniffing
+		buffer := make([]byte, 512)
+		n, _ := file.Read(buffer)
+		
+		// Rewind the file pointer so it can be saved fully later
+		_, err = file.Seek(0, 0) // io.SeekStart is 0
+		if err != nil {
+			h.writeJSON(w, http.StatusInternalServerError, APIResponse{
+				Success: false,
+				Error:   "Failed to read file stream for security verification",
+			})
+			return
+		}
+
+		contentType := http.DetectContentType(buffer[:n])
+
+		// Ensure the detected content type matches the expected type for critical extensions
+		expectedMimePrefix := map[string]string{
+			".pdf":  "application/pdf",
+			".png":  "image/png",
+			".jpg":  "image/jpeg",
+			".jpeg": "image/jpeg",
+			".gif":  "image/gif",
+			".mp4":  "video/mp4",
+			".html": "text/html",
+			".exe":  "application/x-executable",
+		}
+
+		if expected, ok := expectedMimePrefix[ext]; ok {
+			if !strings.HasPrefix(contentType, expected) {
+				h.logger.Warn().Str("filename", header.Filename).Str("detected_mime", contentType).Str("expected_mime", expected).Msg("MIME type spoofing detected")
+				h.writeJSON(w, http.StatusUnsupportedMediaType, APIResponse{
+					Success: false,
+					Error:   fmt.Sprintf("File spoofing detected! Content (%s) does not match extension %s", contentType, ext),
+				})
+				return
+			}
+		}
+
+		// Hard-block dangerous MIME types if they somehow bypass extension check
+		// (e.g. uploading a .pdf that is actually an HTML or JS file)
+		if ext != ".html" && strings.Contains(contentType, "text/html") {
+			h.writeJSON(w, http.StatusUnsupportedMediaType, APIResponse{
+				Success: false,
+				Error:   "File spoofing detected: File contains HTML/Script payload",
+			})
+			return
+		}
 	}
-	if module == "" {
-		module = "general"
+
+	module := r.PathValue("bucket")
+	if module == "" || module == "files" {
+		// Fallback for legacy /api/v1/files/upload endpoint
+		module = strings.TrimSpace(r.FormValue("module"))
+		if module == "" {
+			module = strings.TrimSpace(r.FormValue("modul"))
+		}
+		if module == "" {
+			module = "general"
+		}
 	}
 
 	referensiID := strings.TrimSpace(r.FormValue("referensi_id"))
@@ -349,9 +422,12 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	module := strings.TrimSpace(r.FormValue("module"))
-	if module == "" {
-		module = "general"
+	module := r.PathValue("bucket")
+	if module == "" || module == "files" {
+		module = strings.TrimSpace(r.FormValue("module"))
+		if module == "" {
+			module = "general"
+		}
 	}
 	referensiID := strings.TrimSpace(r.FormValue("referensi_id"))
 	directory := strings.TrimSpace(r.FormValue("directory"))
