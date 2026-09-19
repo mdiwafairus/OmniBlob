@@ -369,6 +369,20 @@ func (h *Handler) ServeFileByID(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400") // 24h client cache
 	w.Header().Set("X-Storage-Path", actualPath)
 
+	// --- Security & Preview Headers ---
+	// Prevent browsers from guessing the MIME type (Padding evasion protection)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// Strictly sandbox the content to disable JavaScript/ActiveX/Popups (Stored XSS protection)
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+
+	// Dynamic Content-Disposition (Preview vs Download)
+	isDownload := r.URL.Query().Get("download")
+	if isDownload == "true" || isDownload == "1" {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fileMeta.FileName))
+	} else {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, fileMeta.FileName))
+	}
+
 	// Stream file to client (zero memory overhead)
 	http.ServeContent(w, r, fileMeta.FileName, fileInfo.ModTime(), fileHandle)
 }
@@ -557,6 +571,16 @@ func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
 	if path == "" { 
 		http.Error(w, "path, bin_id, or ref is required", http.StatusBadRequest)
 		return 
+	}
+
+	// Forward the download flag into the signed path if present
+	isDownload := r.URL.Query().Get("download")
+	if isDownload == "true" || isDownload == "1" {
+		if strings.Contains(path, "?") {
+			path += "&download=1"
+		} else {
+			path += "?download=1"
+		}
 	}
 	
 	// Default expiry to 1 hour if not specified
