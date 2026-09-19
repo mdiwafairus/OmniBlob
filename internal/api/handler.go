@@ -535,13 +535,35 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
 	method := r.URL.Query().Get("method")
-	if method == "" { method = "POST" }
+	if method == "" { method = "GET" } // Default to GET for viewing files
+
 	path := r.URL.Query().Get("path")
-	if path == "" { http.Error(w, "path is required", http.StatusBadRequest); return }
+	ref := r.URL.Query().Get("ref")
+	module := r.URL.Query().Get("module")
+
+	if path == "" && ref != "" {
+		if module == "" { module = "general" }
+		// Construct the standard view path for the given reference ID
+		path = fmt.Sprintf("/api/v1/%s/view?ref_id=%s", module, ref)
+	}
+
+	if path == "" { 
+		http.Error(w, "path or ref is required", http.StatusBadRequest)
+		return 
+	}
 	
 	// Default expiry to 1 hour if not specified
 	expiry := 1 * time.Hour
+	expiresInStr := r.URL.Query().Get("expires_in")
+	if expiresInStr != "" {
+		if secs, err := strconv.Atoi(expiresInStr); err == nil && secs > 0 {
+			expiry = time.Duration(secs) * time.Second
+		}
+	}
 	
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
 	baseURL := "http://" + r.Host
 	presignedURL, err := auth.GeneratePresignedURL(method, baseURL, path, h.accessKey, h.secretKey, expiry)
 	if err != nil {
