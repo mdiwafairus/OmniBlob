@@ -539,16 +539,23 @@ func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
 
 	path := r.URL.Query().Get("path")
 	ref := r.URL.Query().Get("ref")
+	binID := r.URL.Query().Get("bin_id")
 	module := r.URL.Query().Get("module")
 
+	// Priority 1: bin_id
+	if path == "" && binID != "" {
+		// Construct path for specific file ID
+		path = fmt.Sprintf("/api/v1/files/%s", binID)
+	}
+
+	// Priority 2: ref_id (legacy/single file shortcut)
 	if path == "" && ref != "" {
 		if module == "" { module = "general" }
-		// Construct the standard view path for the given reference ID
 		path = fmt.Sprintf("/api/v1/%s/view?ref_id=%s", module, ref)
 	}
 
 	if path == "" { 
-		http.Error(w, "path or ref is required", http.StatusBadRequest)
+		http.Error(w, "path, bin_id, or ref is required", http.StatusBadRequest)
 		return 
 	}
 	

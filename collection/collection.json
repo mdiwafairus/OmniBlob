@@ -186,7 +186,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/presign?ref={{referensi_id}}&module={{bucket}}&expires_in=60",
+							"raw": "{{base_url}}/api/v1/presign?bin_id={{file_id}}&expires_in=60",
 							"host": [
 								"{{base_url}}"
 							],
@@ -197,16 +197,24 @@
 							],
 							"query": [
 								{
-									"key": "ref",
-									"value": "{{referensi_id}}"
-								},
-								{
-									"key": "module",
-									"value": "{{bucket}}"
+									"key": "bin_id",
+									"value": "{{file_id}}",
+									"description": "Gunakan bin_id untuk menargetkan 1 file spesifik (paling direkomendasikan)"
 								},
 								{
 									"key": "expires_in",
 									"value": "60"
+								},
+								{
+									"key": "ref",
+									"value": "{{referensi_id}}",
+									"disabled": true,
+									"description": "Alternatif: Gunakan ref dan module jika hanya 1 file per referensi"
+								},
+								{
+									"key": "module",
+									"value": "{{bucket}}",
+									"disabled": true
 								}
 							]
 						}
