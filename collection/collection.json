@@ -1,4 +1,4 @@
-﻿{
+{
 	"info": {
 		"name": "OmniBlob API",
 		"description": "Dokumentasi API untuk OmniBlob (pwni-file-sync). Termasuk Dashboard, Upload, Presigned URLs, dan Explorer.",
@@ -186,7 +186,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/presign?method=GET&path={{bucket}}/filename.pdf",
+							"raw": "{{base_url}}/api/v1/presign?ref={{referensi_id}}&module={{bucket}}&expires_in=60",
 							"host": [
 								"{{base_url}}"
 							],
@@ -197,12 +197,16 @@
 							],
 							"query": [
 								{
-									"key": "method",
-									"value": "GET"
+									"key": "ref",
+									"value": "{{referensi_id}}"
 								},
 								{
-									"key": "path",
-									"value": "{{bucket}}/filename.pdf"
+									"key": "module",
+									"value": "{{bucket}}"
+								},
+								{
+									"key": "expires_in",
+									"value": "60"
 								}
 							]
 						}
