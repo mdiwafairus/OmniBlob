@@ -22,6 +22,7 @@ type BinaryFileRepository interface {
 	GetDataQualityStats(ctx context.Context) (*entity.DataQualityStats, error)
 	ExistsByPath(ctx context.Context, path string) (bool, error)
 	GetJobHistory(ctx context.Context, clientID string) ([]entity.JobHistory, int64, error)
+	GetVirtualDirectory(ctx context.Context, prefix string) ([]entity.VirtualNode, error)
 }
 
 type LogRepository interface {
@@ -31,4 +32,9 @@ type LogRepository interface {
 
 type OrphanLogRepository interface {
 	Insert(ctx context.Context, log *entity.OrphanFileLog) error
+}
+
+type PhysicalObjectRepository interface {
+	GetByHash(ctx context.Context, hash string) (*entity.PhysicalObject, error)
+	Insert(ctx context.Context, obj *entity.PhysicalObject) error
 }

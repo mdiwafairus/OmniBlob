@@ -19,8 +19,9 @@ import (
 )
 
 type Handler struct {
-	storageRepo  *storage.StorageService
-	binaryRepo   repository.BinaryFileRepository
+	storageRepo       *storage.StorageService
+	binaryRepo        repository.BinaryFileRepository
+	physicalObjRepo   repository.PhysicalObjectRepository
 	logger            zerolog.Logger
 	maxUploadMB       int64
 	allowedExtensions []string
@@ -31,6 +32,7 @@ type Handler struct {
 func NewHandler(
 	storageRepo *storage.StorageService,
 	binaryRepo repository.BinaryFileRepository,
+	physicalObjRepo repository.PhysicalObjectRepository,
 	logger zerolog.Logger,
 	maxUploadMB int,
 	allowedExtensions []string,
@@ -49,6 +51,7 @@ func NewHandler(
 	return &Handler{
 		storageRepo:       storageRepo,
 		binaryRepo:        binaryRepo,
+		physicalObjRepo:   physicalObjRepo,
 		logger:            logger,
 		maxUploadMB:       int64(maxUploadMB),
 		allowedExtensions: exts,
@@ -58,16 +61,18 @@ func NewHandler(
 }
 
 type APIResponse struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
+	ResponCode int         `json:"respon_code"`
+	Success    bool        `json:"success"`
+	Message    string      `json:"message"`
+	Data       interface{} `json:"data,omitempty"`
+	Error      string      `json:"error,omitempty"`
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, resp APIResponse) {
+	resp.ResponCode = status
 	data, err := json.Marshal(resp)
 	if err != nil {
-		http.Error(w, `{"success":false,"error":"JSON encode error"}`, http.StatusInternalServerError)
+		http.Error(w, `{"respon_code":500,"success":false,"error":"JSON encode error"}`, http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -224,21 +229,37 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		flagVal = "1"
 	}
 
-	customPath := strings.TrimSpace(r.FormValue("path"))
+	_ = strings.TrimSpace(r.FormValue("path"))
 	customFileName := strings.TrimSpace(r.FormValue("file_name"))
 	if customFileName == "" {
 		customFileName = header.Filename
 	}
 
-	// 1. Stream file directly to storage & compute checksum
-	relPath, checksum, size, err := h.storageRepo.Save(r.Context(), module, customPath, module, directory, referensiID, 0, customFileName, file)
+	appName := "anonymous"
+	if client := GetClientFromContext(r.Context()); client != nil {
+		appName = client.Name
+	}
+
+	// 1. Stream file directly to temp storage, compute checksum, and commit to CAS
+	relPath, checksum, size, err := h.storageRepo.SaveCAS(r.Context(), file)
 	if err != nil {
-		h.logger.Error().Err(err).Str("file", customFileName).Msg("Failed to save file to storage")
+		h.logger.Error().Err(err).Str("file", customFileName).Msg("Failed to save file to CAS storage")
 		h.writeJSON(w, http.StatusInternalServerError, APIResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Failed to save file: %v", err),
 		})
 		return
+	}
+
+	// 2. Insert into physical_objects (ON CONFLICT DO NOTHING)
+	physObj := &entity.PhysicalObject{
+		ContentHash: checksum,
+		Size:        size,
+		StoragePath: relPath,
+	}
+	if err := h.physicalObjRepo.Insert(r.Context(), physObj); err != nil {
+		h.logger.Error().Err(err).Str("hash", checksum).Msg("Failed to insert physical object")
+		// Continue anyway, storage is already there
 	}
 
 	// Determine MIME type
@@ -251,18 +272,30 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Insert metadata record into PostgreSQL
+	// Calculate logical path for backward compatibility
+	var logicalPath string
+	customPath := strings.TrimSpace(r.FormValue("path")) // Re-read customPath if needed
+	if customPath != "" {
+		logicalPath = filepath.ToSlash(strings.TrimPrefix(customPath, "/"))
+	} else if directory == "date" {
+		logicalPath = h.storageRepo.GenerateShardedPath(appName, module, directory, 0, customFileName, time.Now())
+	} else {
+		logicalPath = h.storageRepo.GenerateStoragePath(appName, module, directory, referensiID, customFileName)
+	}
+
+	// 3. Insert metadata record into PostgreSQL
 	binaryRecord := &entity.BinaryFile{
 		ReferensiID: referensiID,
 		Module:      module,
 		Directory:   directory,
 		FileName:    customFileName,
-		Path:        relPath,
+		Path:        logicalPath,
 		Size:        size,
 		MimeType:    mimeType,
 		Checksum:    checksum,
 		Flag:        flagVal,
 		CreateDate:  time.Now(),
+		AppName:     appName,
 	}
 
 	binID, err := h.binaryRepo.Insert(r.Context(), binaryRecord)
@@ -278,11 +311,6 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Add metadata sidecar for data recovery (Orphaned Data Prevention)
 	destAbsPath := filepath.Join(h.storageRepo.RootPath(), filepath.FromSlash(relPath))
 	_ = h.storageRepo.SaveMetadataSidecar(destAbsPath, *binaryRecord)
-
-	appName := "anonymous"
-	if client := GetClientFromContext(r.Context()); client != nil {
-		appName = client.Name
-	}
 
 	h.logger.Info().
 		Str("app", appName).
@@ -302,7 +330,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 			"referensi_id": referensiID,
 			"module":       module,
 			"file_name":    header.Filename,
-			"path":         relPath,
+			"path":         logicalPath,
 			"url":          fmt.Sprintf("/api/v1/files/%d", binID),
 			"size":         size,
 			"mime_type":    mimeType,
@@ -319,6 +347,7 @@ func (h *Handler) ServeFileByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	bucket := pathParts[2]
 	idStr := pathParts[3]
 	var fileMeta *entity.BinaryFile
 	binID, err := strconv.ParseInt(idStr, 10, 64)
@@ -332,12 +361,26 @@ func (h *Handler) ServeFileByID(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil || fileMeta == nil {
 		h.logger.Warn().Str("id_or_name", idStr).Err(err).Msg("File metadata not found in database")
-		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found in database index"})
+		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found"})
 		return
 	}
 
+	// Bucket validation: ensure the requested bucket matches the file's module
+	if bucket != "files" && fileMeta.Module != bucket {
+		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found"})
+		return
+	}
+
+	// Resolve physical path from CAS if available
+	physicalPath := fileMeta.Path
+	if fileMeta.Checksum != "" {
+		if physObj, err := h.physicalObjRepo.GetByHash(r.Context(), fileMeta.Checksum); err == nil && physObj != nil {
+			physicalPath = physObj.StoragePath
+		}
+	}
+
 	// 2. Open file stream (with automatic fallback to legacy NFS directory)
-	fileHandle, fileInfo, actualPath, err := h.storageRepo.Open(r.Context(), fileMeta.Path)
+	fileHandle, fileInfo, actualPath, err := h.storageRepo.Open(r.Context(), physicalPath)
 	if err != nil {
 		// Fallback: try searching by fileMeta.FileName or Directory/FileName
 		fallbackPath := filepath.Join(fileMeta.Directory, fileMeta.FileName)
@@ -387,10 +430,17 @@ func (h *Handler) ServeFileByID(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, fileMeta.FileName, fileInfo.ModTime(), fileHandle)
 }
 
-// ServeFileByRef serves a file by its referensi_id (e.g. GET /api/v1/files/view?ref_id=LP001&module=lapordiri)
+// ServeFileByRef serves a file by its referensi_id (e.g. GET /api/v1/lapordiri/view?ref_id=LP001)
 func (h *Handler) ServeFileByRef(w http.ResponseWriter, r *http.Request) {
 	refID := strings.TrimSpace(r.URL.Query().Get("ref_id"))
-	module := strings.TrimSpace(r.URL.Query().Get("module"))
+	module := r.PathValue("bucket")
+	
+	if module == "" || module == "files" {
+		module = strings.TrimSpace(r.URL.Query().Get("module"))
+		if module == "" {
+			module = "general"
+		}
+	}
 
 	if refID == "" {
 		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "Missing 'ref_id' query parameter"})
@@ -399,13 +449,13 @@ func (h *Handler) ServeFileByRef(w http.ResponseWriter, r *http.Request) {
 
 	files, err := h.binaryRepo.GetByReferensiID(r.Context(), refID, module)
 	if err != nil || len(files) == 0 {
-		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "No files found for the given reference ID"})
+		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "No files found"})
 		return
 	}
 
 	// Serve the latest active file
 	target := files[0]
-	r.URL.Path = fmt.Sprintf("/api/v1/files/%d", target.BinID)
+	r.URL.Path = fmt.Sprintf("/api/v1/%s/%d", module, target.BinID)
 	h.ServeFileByID(w, r)
 }
 
@@ -459,6 +509,11 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	var results []FileResult
 
+	appName := "anonymous"
+	if client := GetClientFromContext(r.Context()); client != nil {
+		appName = client.Name
+	}
+
 	for _, header := range files {
 		file, err := header.Open()
 		if err != nil {
@@ -466,7 +521,7 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		relPath, checksum, size, err := h.storageRepo.Save(r.Context(), module, "", module, directory, referensiID, 0, header.Filename, file)
+		relPath, checksum, size, err := h.storageRepo.SaveCAS(r.Context(), file)
 		file.Close()
 
 		if err != nil {
@@ -474,9 +529,23 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		physObj := &entity.PhysicalObject{
+			ContentHash: checksum,
+			Size:        size,
+			StoragePath: relPath,
+		}
+		_ = h.physicalObjRepo.Insert(r.Context(), physObj)
+
 		mimeType := header.Header.Get("Content-Type")
 		if mimeType == "" || mimeType == "application/octet-stream" {
 			mimeType = "application/octet-stream"
+		}
+
+		var logicalPath string
+		if directory == "date" {
+			logicalPath = h.storageRepo.GenerateShardedPath(appName, module, directory, 0, header.Filename, time.Now())
+		} else {
+			logicalPath = h.storageRepo.GenerateStoragePath(appName, module, directory, referensiID, header.Filename)
 		}
 
 		binaryRecord := &entity.BinaryFile{
@@ -484,12 +553,13 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 			Module:      module,
 			Directory:   directory,
 			FileName:    header.Filename,
-			Path:        relPath,
+			Path:        logicalPath,
 			Size:        size,
 			MimeType:    mimeType,
 			Checksum:    checksum,
 			Flag:        flagVal,
 			CreateDate:  time.Now(),
+			AppName:     appName,
 		}
 
 		binID, err := h.binaryRepo.Insert(r.Context(), binaryRecord)
@@ -505,7 +575,7 @@ func (h *Handler) BulkUpload(w http.ResponseWriter, r *http.Request) {
 		results = append(results, FileResult{
 			FileName: header.Filename,
 			BinID:    binID,
-			Path:     relPath,
+			Path:     logicalPath,
 			URL:      fmt.Sprintf("/api/v1/%s/%d", module, binID),
 		})
 	}
@@ -524,6 +594,7 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	bucket := pathParts[2]
 	idStr := pathParts[3]
 	var fileMeta *entity.BinaryFile
 	binID, err := strconv.ParseInt(idStr, 10, 64)
@@ -534,7 +605,12 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil || fileMeta == nil {
-		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found in database index"})
+		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found"})
+		return
+	}
+
+	if bucket != "files" && fileMeta.Module != bucket {
+		h.writeJSON(w, http.StatusNotFound, APIResponse{Success: false, Error: "File not found"})
 		return
 	}
 
@@ -569,7 +645,7 @@ func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if path == "" { 
-		http.Error(w, "path, bin_id, or ref is required", http.StatusBadRequest)
+		h.writeJSON(w, http.StatusBadRequest, APIResponse{Success: false, Error: "path, bin_id, or ref is required"})
 		return 
 	}
 
@@ -598,11 +674,14 @@ func (h *Handler) GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
 	baseURL := "http://" + r.Host
 	presignedURL, err := auth.GeneratePresignedURL(method, baseURL, path, h.accessKey, h.secretKey, expiry)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.writeJSON(w, http.StatusInternalServerError, APIResponse{Success: false, Error: err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"presigned_url": presignedURL})
+	h.writeJSON(w, http.StatusOK, APIResponse{
+		Success: true,
+		Message: "Presigned URL generated successfully",
+		Data: map[string]string{"presigned_url": presignedURL},
+	})
 }
 

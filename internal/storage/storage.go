@@ -17,6 +17,7 @@ import (
 )
 
 var safeFilenameRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
+var safePathRegex = regexp.MustCompile(`[^a-zA-Z0-9._/-]`)
 
 type StorageService struct {
 	rootPath     string
@@ -50,6 +51,10 @@ func (s *StorageService) GenerateStoragePath(bucket string, module string, direc
 	}
 	module = strings.ToLower(strings.TrimSpace(module))
 
+	if bucket == module {
+		bucket = "" // Prevent duplicate <module>/<module>/ folder structure
+	}
+
 	cleanName := safeFilenameRegex.ReplaceAllString(filename, "_")
 	if cleanName == "" {
 		cleanName = "file"
@@ -64,7 +69,7 @@ func (s *StorageService) GenerateStoragePath(bucket string, module string, direc
 
 	// 2. Subfolder by UUID / Referensi ID (e.g. <bucket>/lapor_diri/<uuid>/<filename>)
 	if referensiID != "" {
-		cleanRef := safeFilenameRegex.ReplaceAllString(referensiID, "_")
+		cleanRef := safePathRegex.ReplaceAllString(referensiID, "_")
 		return filepath.ToSlash(filepath.Join(bucket, module, cleanRef, cleanName))
 	}
 
@@ -125,6 +130,10 @@ func (s *StorageService) Save(ctx context.Context, bucket string, customPath str
 
 	absPath := filepath.Join(s.rootPath, filepath.FromSlash(relPath))
 
+	if fileutil.Exists(absPath) {
+		return "", "", 0, fmt.Errorf("file_exists: %s", relPath)
+	}
+
 	if err := fileutil.EnsureDir(filepath.Dir(absPath)); err != nil {
 		return "", "", 0, fmt.Errorf("ensure dir: %w", err)
 	}
@@ -146,6 +155,58 @@ func (s *StorageService) Save(ctx context.Context, bucket string, customPath str
 
 	checksum := hex.EncodeToString(hash.Sum(nil))
 	return relPath, checksum, size, nil
+}
+
+// SaveCAS streams data to a temp file, computes hash, and atomically moves it to objects/{hash}.
+// Returns the relative path (objects/{hash}), checksum, size, and error.
+func (s *StorageService) SaveCAS(ctx context.Context, r io.Reader) (string, string, int64, error) {
+	tempName := fmt.Sprintf("temp_%d", time.Now().UnixNano())
+	tempRelPath := filepath.Join("objects", "temp", tempName)
+	tempAbsPath := filepath.Join(s.rootPath, tempRelPath)
+
+	if err := fileutil.EnsureDir(filepath.Dir(tempAbsPath)); err != nil {
+		return "", "", 0, fmt.Errorf("ensure temp dir: %w", err)
+	}
+
+	file, err := os.Create(tempAbsPath)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("create temp file: %w", err)
+	}
+
+	hash := sha256.New()
+	multiWriter := io.MultiWriter(file, hash)
+
+	size, err := io.Copy(multiWriter, r)
+	file.Close() // Explicit close before rename
+
+	if err != nil {
+		_ = os.Remove(tempAbsPath)
+		return "", "", 0, fmt.Errorf("stream copy file: %w", err)
+	}
+
+	checksum := hex.EncodeToString(hash.Sum(nil))
+	destRelPath := filepath.Join("objects", checksum)
+	destAbsPath := filepath.Join(s.rootPath, destRelPath)
+
+	if fileutil.Exists(destAbsPath) {
+		// File already exists in CAS, just discard temp
+		_ = os.Remove(tempAbsPath)
+		return destRelPath, checksum, size, nil
+	}
+
+	// Rename temp to final hash name
+	if err := os.Rename(tempAbsPath, destAbsPath); err != nil {
+		// If rename fails because file exists (race condition), just discard temp
+		if fileutil.Exists(destAbsPath) {
+			_ = os.Remove(tempAbsPath)
+			return destRelPath, checksum, size, nil
+		}
+		// Fallback for cross-device rename
+		_ = os.Remove(tempAbsPath)
+		return "", "", 0, fmt.Errorf("rename to cas dest: %w", err)
+	}
+
+	return destRelPath, checksum, size, nil
 }
 
 // Open opens a file, first checking the new sharded rootPath, then falling back to legacyPath.
@@ -226,6 +287,13 @@ func (s *StorageService) MigrateLegacyFile(ctx context.Context, bucket string, l
 	if srcPath == destAbsPath {
 		checksum, _ := fileutil.SHA256FromFile(destAbsPath)
 		return destRelPath, checksum, info.Size(), nil
+	}
+
+	// Idempotency: If the file is already inside the new storage root path (e.g., uploaded via API), 
+	// do NOT migrate it to Date Sharding. Just leave it as is and mark it migrated.
+	if strings.HasPrefix(filepath.Clean(srcPath), filepath.Clean(s.rootPath)) {
+		checksum, _ := fileutil.SHA256FromFile(srcPath)
+		return legacyRelPath, checksum, info.Size(), nil
 	}
 
 	if err := fileutil.EnsureDir(filepath.Dir(destAbsPath)); err != nil {

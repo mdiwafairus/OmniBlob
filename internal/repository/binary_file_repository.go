@@ -30,7 +30,8 @@ func (r *binaryFileRepository) GetByID(ctx context.Context, binID int64) (*entit
 		       COALESCE(mime_type, ''), 
 		       COALESCE(checksum, ''), 
 		       COALESCE(flag, '1'), 
-		       COALESCE(create_date, NOW())
+		       COALESCE(create_date, NOW()),
+		       COALESCE(app_name, '')
 		FROM binary_file
 		WHERE bin_id = $1
 		LIMIT 1
@@ -40,7 +41,7 @@ func (r *binaryFileRepository) GetByID(ctx context.Context, binID int64) (*entit
 	err := row.Scan(
 		&f.BinID, &f.ReferensiID, &f.Module, &f.Directory,
 		&f.FileName, &f.Path, &f.Size, &f.MimeType,
-		&f.Checksum, &f.Flag, &f.CreateDate,
+		&f.Checksum, &f.Flag, &f.CreateDate, &f.AppName,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("GetByID: %w", err)
@@ -60,7 +61,8 @@ func (r *binaryFileRepository) GetByFileName(ctx context.Context, fileName strin
 		       COALESCE(mime_type, ''), 
 		       COALESCE(checksum, ''), 
 		       COALESCE(flag, '1'), 
-		       COALESCE(create_date, NOW())
+		       COALESCE(create_date, NOW()),
+		       COALESCE(app_name, '')
 		FROM binary_file
 		WHERE file_name = $1
 		ORDER BY bin_id DESC
@@ -71,7 +73,7 @@ func (r *binaryFileRepository) GetByFileName(ctx context.Context, fileName strin
 	err := row.Scan(
 		&f.BinID, &f.ReferensiID, &f.Module, &f.Directory,
 		&f.FileName, &f.Path, &f.Size, &f.MimeType,
-		&f.Checksum, &f.Flag, &f.CreateDate,
+		&f.Checksum, &f.Flag, &f.CreateDate, &f.AppName,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("GetByFileName: %w", err)
@@ -91,7 +93,8 @@ func (r *binaryFileRepository) GetByReferensiID(ctx context.Context, referensiID
 		       COALESCE(mime_type, ''), 
 		       COALESCE(checksum, ''), 
 		       COALESCE(flag, '1'), 
-		       COALESCE(create_date, NOW())
+		       COALESCE(create_date, NOW()),
+		       COALESCE(app_name, '')
 		FROM binary_file
 		WHERE referensi_id = $1 AND ($2 = '' OR module = $2)
 		ORDER BY bin_id DESC
@@ -108,7 +111,7 @@ func (r *binaryFileRepository) GetByReferensiID(ctx context.Context, referensiID
 		if err := rows.Scan(
 			&f.BinID, &f.ReferensiID, &f.Module, &f.Directory,
 			&f.FileName, &f.Path, &f.Size, &f.MimeType,
-			&f.Checksum, &f.Flag, &f.CreateDate,
+			&f.Checksum, &f.Flag, &f.CreateDate, &f.AppName,
 		); err != nil {
 			return nil, fmt.Errorf("scan binary file: %w", err)
 		}
@@ -132,7 +135,8 @@ func (r *binaryFileRepository) GetPendingFiles(ctx context.Context, lastBinID in
 		       COALESCE(mime_type, ''), 
 		       COALESCE(checksum, ''), 
 		       COALESCE(flag, '1'), 
-		       COALESCE(create_date, NOW())
+		       COALESCE(create_date, NOW()),
+		       COALESCE(app_name, '')
 		FROM binary_file
 		WHERE bin_id > $1
 		ORDER BY bin_id ASC
@@ -150,7 +154,7 @@ func (r *binaryFileRepository) GetPendingFiles(ctx context.Context, lastBinID in
 		if err := rows.Scan(
 			&f.BinID, &f.ReferensiID, &f.Module, &f.Directory,
 			&f.FileName, &f.Path, &f.Size, &f.MimeType,
-			&f.Checksum, &f.Flag, &f.CreateDate,
+			&f.Checksum, &f.Flag, &f.CreateDate, &f.AppName,
 		); err != nil {
 			return nil, fmt.Errorf("scan pending file: %w", err)
 		}
@@ -178,15 +182,15 @@ func (r *binaryFileRepository) Insert(ctx context.Context, file *entity.BinaryFi
 	}
 
 	const query = `
-		INSERT INTO binary_file (bin_id, referensi_id, module, directory, file_name, path, size, mime_type, checksum, flag, create_date)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO binary_file (bin_id, referensi_id, module, directory, file_name, path, size, mime_type, checksum, flag, create_date, app_name)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING bin_id
 	`
 	var newID int64
 	err := r.db.QueryRow(
 		ctx, query,
 		file.BinID, file.ReferensiID, file.Module, file.Directory, file.FileName,
-		file.Path, file.Size, file.MimeType, file.Checksum, file.Flag, file.CreateDate,
+		file.Path, file.Size, file.MimeType, file.Checksum, file.Flag, file.CreateDate, file.AppName,
 	).Scan(&newID)
 
 	if err != nil {
@@ -213,7 +217,7 @@ func (r *binaryFileRepository) GetMigrationStats(ctx context.Context) (*entity.M
 	const query = `
 		SELECT 
 			COUNT(*) as total_files,
-			SUM(CASE WHEN flag = 'M' THEN 1 ELSE 0 END) as migrated_files,
+			COALESCE(SUM(CASE WHEN flag = 'M' THEN 1 ELSE 0 END), 0) as migrated_files,
 			COALESCE(SUM(CASE WHEN flag = 'M' THEN size ELSE 0 END), 0) as total_migrated_bytes
 		FROM binary_file
 	`

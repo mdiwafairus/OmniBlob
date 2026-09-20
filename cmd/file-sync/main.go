@@ -107,7 +107,8 @@ func main() {
 	go reconciliationService.StartBackgroundReconciliation(ctx)
 
 	// 6. Initialize HTTP API Server (MERGE CONFLICT RESOLVED)
-	handler := api.NewHandler(storageService, binaryRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Server.AllowedExtensions, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
+	physicalRepo := repository.NewPhysicalObjectRepository(dbPool)
+	handler := api.NewHandler(storageService, binaryRepo, physicalRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Server.AllowedExtensions, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
 	dashboardService := service.NewDashboardService(binaryRepo, logRepo)
 	
 	var clientNames []string
@@ -115,7 +116,7 @@ func main() {
 		clientNames = append(clientNames, client.Name)
 	}
 	dashboardHandler := api.NewDashboardHandler(dashboardService, &cfg.Storage, clientNames)
-	explorerHandler := api.NewExplorerHandler(&cfg.Storage, &cfg.Migration, log)
+	explorerHandler := api.NewExplorerHandler(&cfg.Storage, &cfg.Migration, log, binaryRepo)
 	
 	router := api.NewRouter(handler, dashboardHandler, explorerHandler, &cfg.Server, &cfg.Security, auditLogger, cfg.Auth.SecretKey, log, dbPool)
 	httpServer := api.NewServer(&cfg.Server, &cfg.Security, auditLogger, router, log)

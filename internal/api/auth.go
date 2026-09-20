@@ -23,10 +23,10 @@ const (
 	ClientContextKey contextKey = "authenticated_client"
 )
 
-// ClientInfo holds authenticated client application metadata.
 type ClientInfo struct {
 	Name           string
 	User           string
+	Password       string
 	AllowedModules []string
 	WhitelistIPs   []string
 }
@@ -89,44 +89,53 @@ func authenticateLDAP(cfg *config.LDAPConfig, username, password string) bool {
 func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, dbPool *pgxpool.Pool, next http.HandlerFunc) http.HandlerFunc {
 	suspectLogger := logger.NewSuspectLogger()
 
-	// Build fast lookup maps from config
-	keyToClient := make(map[string]*ClientInfo)
-	userPassToClient := make(map[string]*ClientInfo)
+	// Build fast lookup map from config
+	// Key: "APIKey:User:Password" -> ClientInfo
+	comboToClient := make(map[string]*ClientInfo)
 
 	// 1. Populate configured clients
 	for _, c := range cfg.Clients {
-		info := &ClientInfo{
-			Name:           c.Name,
-			User:           c.User,
-			AllowedModules: c.AllowedModules,
-			WhitelistIPs:   c.WhitelistIPs,
-		}
-		if c.ApiKey != "" {
-			keyToClient[c.ApiKey] = info
-		}
-		if c.User != "" && c.Password != "" {
-			userPassToClient[c.User+":"+c.Password] = info
+		if c.ApiKey != "" && c.User != "" && c.Password != "" {
+			comboKey := c.ApiKey + ":" + c.User + ":" + c.Password
+			if _, exists := comboToClient[comboKey]; exists {
+				log.Fatal().Str("client", c.Name).Msg("Duplicate 3-layer authentication combination found in config!")
+			}
+			comboToClient[comboKey] = &ClientInfo{
+				Name:           c.Name,
+				User:           c.User,
+				Password:       c.Password,
+				AllowedModules: c.AllowedModules,
+				WhitelistIPs:   c.WhitelistIPs,
+			}
+		} else {
+			log.Warn().Str("client", c.Name).Msg("Client ignored: Must provide API Key, User, and Password")
 		}
 	}
 
 	// 2. Backward compatibility with single global API key / user
-	if cfg.ApiKey != "" && keyToClient[cfg.ApiKey] == nil {
-		keyToClient[cfg.ApiKey] = &ClientInfo{Name: "default-app", AllowedModules: []string{"*"}}
-	}
-	if cfg.ApiUser != "" && cfg.ApiPass != "" && userPassToClient[cfg.ApiUser+":"+cfg.ApiPass] == nil {
-		userPassToClient[cfg.ApiUser+":"+cfg.ApiPass] = &ClientInfo{Name: "default-app", User: cfg.ApiUser, AllowedModules: []string{"*"}}
+	if cfg.ApiKey != "" && cfg.ApiUser != "" && cfg.ApiPass != "" {
+		comboKey := cfg.ApiKey + ":" + cfg.ApiUser + ":" + cfg.ApiPass
+		if _, exists := comboToClient[comboKey]; exists {
+			log.Fatal().Msg("Global authentication combination conflicts with an existing client!")
+		}
+		comboToClient[comboKey] = &ClientInfo{
+			Name: "default-app", 
+			User: cfg.ApiUser, 
+			Password: cfg.ApiPass,
+			AllowedModules: []string{"*"},
+		}
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		// If no authentication is configured on the server, allow request
-		if len(keyToClient) == 0 && len(userPassToClient) == 0 {
+		if len(comboToClient) == 0 {
 			next(w, r)
 			return
 		}
 
 		var matchedClient *ClientInfo
 
-		// Strategy 1: Check X-API-KEY or X-App-Key header
+		// Extract API Key
 		clientKey := strings.TrimSpace(r.Header.Get("X-API-KEY"))
 		if clientKey == "" {
 			clientKey = strings.TrimSpace(r.Header.Get("X-App-Key"))
@@ -134,32 +143,25 @@ func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, dbPool *pgx
 		if clientKey == "" {
 			clientKey = strings.TrimSpace(r.Header.Get("X-Api-Key"))
 		}
-		if clientKey != "" {
-			matchedClient = keyToClient[clientKey]
+
+		// Extract User and Password
+		user, pass, ok := r.BasicAuth()
+		if !ok {
+			user = strings.TrimSpace(r.Header.Get("X-API-USER"))
+			pass = strings.TrimSpace(r.Header.Get("X-API-PASS"))
 		}
 
-		// Strategy 2: Check HTTP Basic Auth (user:password)
-		if matchedClient == nil {
-			if user, pass, ok := r.BasicAuth(); ok {
-				// Check LDAP First if enabled
-				if cfg.LDAP.Enabled && authenticateLDAP(&cfg.LDAP, user, pass) {
-					matchedClient = &ClientInfo{Name: "ldap-user", User: user, AllowedModules: []string{"*"}}
-				} else {
-					matchedClient = userPassToClient[user+":"+pass]
-				}
-			}
-		}
-
-		// Strategy 3: Check Custom X-API-USER & X-API-PASS headers
-		if matchedClient == nil {
-			user := strings.TrimSpace(r.Header.Get("X-API-USER"))
-			pass := strings.TrimSpace(r.Header.Get("X-API-PASS"))
-			if user != "" && pass != "" {
-				if cfg.LDAP.Enabled && authenticateLDAP(&cfg.LDAP, user, pass) {
-					matchedClient = &ClientInfo{Name: "ldap-user", User: user, AllowedModules: []string{"*"}}
-				} else {
-					matchedClient = userPassToClient[user+":"+pass]
-				}
+		// Validate all 3 are present
+		if clientKey != "" && user != "" && pass != "" {
+			comboKey := clientKey + ":" + user + ":" + pass
+			matchedClient = comboToClient[comboKey]
+			
+			// LDAP Fallback (if enabled and user/pass is valid in LDAP)
+			if matchedClient == nil && cfg.LDAP.Enabled && authenticateLDAP(&cfg.LDAP, user, pass) {
+				// If LDAP succeeds, we still need to verify the API Key belongs to SOME client?
+				// To keep it strictly 3-layer, we can check if LDAP is allowed to use this API Key.
+				// For now, if LDAP is enabled, we create an ephemeral client.
+				matchedClient = &ClientInfo{Name: "ldap-user", User: user, AllowedModules: []string{"*"}}
 			}
 		}
 

@@ -38,6 +38,16 @@
 								"key": "X-API-KEY",
 								"value": "{{api_key}}",
 								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
 							}
 						],
 						"body": {
@@ -85,6 +95,16 @@
 								"key": "X-API-KEY",
 								"value": "{{api_key}}",
 								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
 							}
 						],
 						"body": {
@@ -130,7 +150,23 @@
 					"name": "Get File by Internal ID (bin_id)",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/{{bucket}}/{{bin_id}}",
 							"host": [
@@ -149,7 +185,23 @@
 					"name": "Get File by Reference ID",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/{{bucket}}/view?ref_id={{referensi_id}}&module={{bucket}}",
 							"host": [
@@ -182,6 +234,16 @@
 							{
 								"key": "X-API-KEY",
 								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
 								"type": "text"
 							}
 						],
@@ -229,7 +291,23 @@
 					"name": "Dashboard Summary",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/dashboard/summary",
 							"host": [
@@ -248,7 +326,23 @@
 					"name": "Dashboard Analytics",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/dashboard/analytics",
 							"host": [
@@ -267,7 +361,23 @@
 					"name": "Dashboard Quality",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/dashboard/quality",
 							"host": [
@@ -286,7 +396,23 @@
 					"name": "Explorer List Directory",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/explorer/list?target=legacy&path=/",
 							"host": [

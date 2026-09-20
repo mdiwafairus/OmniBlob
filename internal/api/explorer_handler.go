@@ -11,19 +11,22 @@ import (
 	"pwni-file-sync/internal/config"
 
 	"github.com/rs/zerolog"
+	"pwni-file-sync/internal/repository"
 )
 
 type ExplorerHandler struct {
-	cfg *config.StorageConfig
-	mig *config.MigrationConfig
-	log zerolog.Logger
+	cfg        *config.StorageConfig
+	mig        *config.MigrationConfig
+	log        zerolog.Logger
+	binaryRepo repository.BinaryFileRepository
 }
 
-func NewExplorerHandler(cfg *config.StorageConfig, mig *config.MigrationConfig, log zerolog.Logger) *ExplorerHandler {
+func NewExplorerHandler(cfg *config.StorageConfig, mig *config.MigrationConfig, log zerolog.Logger, binaryRepo repository.BinaryFileRepository) *ExplorerHandler {
 	return &ExplorerHandler{
-		cfg: cfg,
-		mig: mig,
-		log: log,
+		cfg:        cfg,
+		mig:        mig,
+		log:        log,
+		binaryRepo: binaryRepo,
 	}
 }
 
@@ -83,6 +86,45 @@ func (h *ExplorerHandler) ListDirectory(w http.ResponseWriter, r *http.Request) 
 	if !strings.HasPrefix(strings.ToLower(absFullPath), strings.ToLower(absBasePath)) {
 		h.log.Warn().Str("req_path", reqPath).Msg("Directory traversal attempt blocked")
 		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	if target == "omniblob" {
+		vNodes, err := h.binaryRepo.GetVirtualDirectory(r.Context(), reqPath)
+		if err != nil {
+			h.log.Error().Err(err).Msg("Failed to read virtual directory")
+			http.Error(w, "Failed to read directory", http.StatusInternalServerError)
+			return
+		}
+		
+		var nodes []FileNode
+		for _, v := range vNodes {
+			// Prepend / to path if needed for consistent UI behavior
+			outPath := v.Path
+			if !strings.HasPrefix(outPath, "/") {
+				outPath = "/" + outPath
+			}
+			nodes = append(nodes, FileNode{
+				Name:         v.Name,
+				Path:         outPath,
+				IsDirectory:  v.IsDirectory,
+				Size:         v.Size,
+				ModifiedTime: v.ModifiedTime,
+			})
+		}
+		// Hardcode `objects/` physical dir for admins to still see raw files if they look for it
+		if reqPath == "/" {
+			nodes = append(nodes, FileNode{
+				Name: "objects",
+				Path: "/objects",
+				IsDirectory: true,
+				Size: 0,
+				ModifiedTime: time.Now(),
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(nodes)
 		return
 	}
 
