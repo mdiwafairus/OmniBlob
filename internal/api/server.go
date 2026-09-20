@@ -27,6 +27,7 @@ type Server struct {
 	logger      zerolog.Logger
 	securityCfg *config.SecurityConfig
 	auditLogger *logger.AuditLogger
+	tlsEnabled  bool
 }
 
 func NewServer(cfg *config.ServerConfig, secCfg *config.SecurityConfig, auditLogger *logger.AuditLogger, handler http.Handler, log zerolog.Logger) *Server {
@@ -62,6 +63,7 @@ func NewServer(cfg *config.ServerConfig, secCfg *config.SecurityConfig, auditLog
 		logger:      log,
 		securityCfg: secCfg,
 		auditLogger: auditLogger,
+		tlsEnabled:  cfg.TLSEnabled,
 	}
 }
 
@@ -125,17 +127,7 @@ func (s *Server) generateSelfSignedCert(certPath, keyPath string) error {
 }
 
 func (s *Server) Start() error {
-		certPath := "server.crt"
-	keyPath := "server.key"
-
-	if err := s.generateSelfSignedCert(certPath, keyPath); err != nil {
-		return fmt.Errorf("failed to generate certs: %w", err)
-	}
-
-	s.logger.Info().Str("addr", s.httpServer.Addr).Msg("HTTPS Server listening for requests (HTTP/2 Enabled)")
-	
 	// Create raw TCP listener
-	
 	ln, err := net.Listen("tcp", s.httpServer.Addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", s.httpServer.Addr, err)
@@ -151,9 +143,25 @@ func (s *Server) Start() error {
 		s.logger.Warn().Msg("Socket Security is DISABLED. Server is open to all Layer 4 connections.")
 	}
 
-	if err := s.httpServer.ServeTLS(ln, certPath, keyPath); err != nil && err != http.ErrServerClosed {
-		return fmt.Errorf("http server failed: %w", err)
+	if s.tlsEnabled {
+		certPath := "server.crt"
+		keyPath := "server.key"
+
+		if err := s.generateSelfSignedCert(certPath, keyPath); err != nil {
+			return fmt.Errorf("failed to generate certs: %w", err)
+		}
+
+		s.logger.Info().Str("addr", s.httpServer.Addr).Msg("HTTPS Server listening for requests (HTTP/2 Enabled)")
+		if err := s.httpServer.ServeTLS(ln, certPath, keyPath); err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("https server failed: %w", err)
+		}
+	} else {
+		s.logger.Info().Str("addr", s.httpServer.Addr).Msg("HTTP Server listening for requests (TLS Disabled)")
+		if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("http server failed: %w", err)
+		}
 	}
+
 	return nil
 }
 

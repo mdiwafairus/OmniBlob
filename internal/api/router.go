@@ -125,10 +125,30 @@ func NewRouter(
 		uploadHandler(w, r)
 	}
 
+	secureViewByRefHandler := func(w http.ResponseWriter, r *http.Request) {
+		if auth.ValidatePresignedURL(r, secretKey) {
+			h.ServeFileByRef(w, r)
+			return
+		}
+		AppAuthMiddleware(cfg, log, dbPool, h.ServeFileByRef)(w, r)
+	}
+
+	secureViewByIDHandler := func(w http.ResponseWriter, r *http.Request) {
+		if auth.ValidatePresignedURL(r, secretKey) {
+			h.ServeFileByID(w, r)
+			return
+		}
+		AppAuthMiddleware(cfg, log, dbPool, h.ServeFileByID)(w, r)
+	}
+	
+	secureDeleteHandler := func(w http.ResponseWriter, r *http.Request) {
+		AppAuthMiddleware(cfg, log, dbPool, h.DeleteFile)(w, r)
+	}
+
 	// Dynamic Bucket Routing
 	mux.HandleFunc("/api/v1/{bucket}/upload", secureUploadHandler)
 	mux.HandleFunc("/api/v1/{bucket}/bulk-upload", bulkUploadHandler)
-	mux.HandleFunc("/api/v1/{bucket}/view", h.ServeFileByRef)
+	mux.HandleFunc("/api/v1/{bucket}/view", secureViewByRefHandler)
 	mux.HandleFunc("/api/v1/{bucket}/", func(w http.ResponseWriter, r *http.Request) {
 		bucket := r.PathValue("bucket")
 		if r.URL.Path == "/api/v1/"+bucket+"/upload" {
@@ -140,14 +160,14 @@ func NewRouter(
 			return
 		}
 		if r.URL.Path == "/api/v1/"+bucket+"/view" {
-			h.ServeFileByRef(w, r)
+			secureViewByRefHandler(w, r)
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/"+bucket+"/") {
 			if r.Method == http.MethodDelete {
-				h.DeleteFile(w, r)
+				secureDeleteHandler(w, r)
 			} else {
-				h.ServeFileByID(w, r)
+				secureViewByIDHandler(w, r)
 			}
 			return
 		}

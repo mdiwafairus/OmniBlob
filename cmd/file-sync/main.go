@@ -131,9 +131,14 @@ func main() {
 		Int("port", cfg.Server.Port).
 		Msg("pwni-file-sync is fully running and ready to handle file requests from application servers.")
 
+	protocol := "http"
+	if cfg.Server.TLSEnabled {
+		protocol = "https"
+	}
+
 	fmt.Printf("\n========================================================\n")
 	fmt.Printf("🚀 OmniBlob Storage Node & API Server is RUNNING\n")
-	fmt.Printf("📊 Dashboard (if built) is accessible at: http://localhost:%d/\n", cfg.Server.Port)
+	fmt.Printf("📊 Dashboard (if built) is accessible at: %s://localhost:%d/\n", protocol, cfg.Server.Port)
 	fmt.Printf("========================================================\n\n")
 
 	// 7. Wait for OS termination signals (Graceful Shutdown)

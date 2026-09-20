@@ -50,6 +50,7 @@ type ClientConfig struct {
 type ServerConfig struct {
 	Host            string         `yaml:"host" mapstructure:"host"`
 	Port            int            `yaml:"port" mapstructure:"port"`
+	TLSEnabled      bool           `yaml:"tls_enabled" mapstructure:"tls_enabled"`
 	ReadTimeoutSec  int            `yaml:"read_timeout_sec" mapstructure:"read_timeout_sec"`
 	WriteTimeoutSec int            `yaml:"write_timeout_sec" mapstructure:"write_timeout_sec"`
 	MaxUploadSizeMB int            `yaml:"max_upload_size_mb" mapstructure:"max_upload_size_mb"`
@@ -167,6 +168,11 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if srvHost := os.Getenv("HOST"); srvHost != "" {
 		cfg.Server.Host = srvHost
+	}
+	if tlsEnabled := os.Getenv("TLS_ENABLED"); tlsEnabled != "" {
+		if b, err := strconv.ParseBool(tlsEnabled); err == nil {
+			cfg.Server.TLSEnabled = b
+		}
 	}
 	if apiKey := os.Getenv("API_KEY"); apiKey != "" {
 		cfg.Server.ApiKey = apiKey

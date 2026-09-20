@@ -246,6 +246,51 @@ func AppAuthMiddleware(cfg *config.ServerConfig, log zerolog.Logger, dbPool *pgx
 			}
 		}
 
+		// Bucket/Module Validation
+		bucket := r.PathValue("bucket")
+		
+		// Fallback for legacy endpoints (/api/v1/files/...) where bucket is in form or query
+		if bucket == "" || bucket == "files" {
+			bucket = strings.TrimSpace(r.FormValue("module"))
+			if bucket == "" {
+				bucket = strings.TrimSpace(r.FormValue("modul"))
+			}
+			if bucket == "" {
+				bucket = strings.TrimSpace(r.URL.Query().Get("module"))
+			}
+			if bucket == "" {
+				bucket = "general"
+			}
+		}
+
+		if bucket != "" && bucket != "files" {
+			moduleAllowed := false
+			for _, allowedModule := range matchedClient.AllowedModules {
+				if allowedModule == "*" || allowedModule == bucket {
+					moduleAllowed = true
+					break
+				}
+			}
+
+			if !moduleAllowed {
+				suspectLogger.Warn().
+					Str("client", matchedClient.Name).
+					Str("path", r.URL.Path).
+					Str("bucket", bucket).
+					Str("remote_ip", clientIP).
+					Msg("Access denied: Client not authorized for this bucket")
+
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.Header().Set("Connection", "close")
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": false,
+					"error":   fmt.Sprintf("Forbidden: Your application is not authorized to access bucket/module '%s'", bucket),
+				})
+				return
+			}
+		}
+
 		// Inject authenticated client info into request context
 		ctx := context.WithValue(r.Context(), ClientContextKey, matchedClient)
 		next(w, r.WithContext(ctx))
