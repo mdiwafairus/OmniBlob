@@ -226,12 +226,12 @@ export function Dashboard() {
             Overview
             {rawData.license_tier && (
                <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${
-                  rawData.license_tier === 'TRIAL' ? 'bg-amber/20 text-amber border border-amber/30' :
-                  rawData.license_tier === 'PRO' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                  rawData.license_tier.toUpperCase() === 'TRIAL' ? 'bg-amber/20 text-amber border border-amber/30' :
+                  rawData.license_tier.toUpperCase() === 'PRO' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
                   'bg-cy/20 text-cy border border-cy/30'
                }`}>
-                  {rawData.license_tier === 'ENTERPRISE' ? '👑 ENTERPRISE' : 
-                   rawData.license_tier === 'PRO' ? '⭐ PRO' : 
+                  {rawData.license_tier.toUpperCase() === 'ENTERPRISE' ? '👑 ENTERPRISE' : 
+                   rawData.license_tier.toUpperCase() === 'PRO' ? '⭐ PRO' : 
                    '⏳ TRIAL'}
                </span>
             )}

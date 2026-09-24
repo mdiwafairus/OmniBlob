@@ -281,6 +281,41 @@
 							]
 						}
 					}
+				},
+				{
+					"name": "Delete File",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-USER",
+								"value": "{{api_user}}",
+								"type": "text"
+							},
+							{
+								"key": "X-API-PASS",
+								"value": "{{api_pass}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/{{bucket}}/{{bin_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"{{bucket}}",
+								"{{bin_id}}"
+							]
+						}
+					}
 				}
 			]
 		},

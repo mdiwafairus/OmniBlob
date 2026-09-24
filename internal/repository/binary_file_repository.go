@@ -200,6 +200,15 @@ func (r *binaryFileRepository) Insert(ctx context.Context, file *entity.BinaryFi
 	return newID, nil
 }
 
+func (r *binaryFileRepository) Delete(ctx context.Context, binID int64) error {
+	const query = `DELETE FROM binary_file WHERE bin_id = $1`
+	_, err := r.db.Exec(ctx, query, binID)
+	if err != nil {
+		return fmt.Errorf("Delete binary_file: %w", err)
+	}
+	return nil
+}
+
 func (r *binaryFileRepository) UpdatePathAndStatus(ctx context.Context, binID int64, path string, checksum string, size int64, flag string) error {
 	const query = `
 		UPDATE binary_file 

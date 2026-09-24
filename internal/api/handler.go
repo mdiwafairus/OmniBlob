@@ -614,10 +614,14 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete from storage
-	err = h.storageRepo.Delete(r.Context(), fileMeta.Path)
+	// Delete from metadata database ONLY.
+	// We DO NOT delete the physical file here because OmniBlob uses deduplication (CAS).
+	// Other users' files might be pointing to the exact same physical hash.
+	// The Garbage Collector will eventually delete the physical file if ref_count reaches 0.
+	err = h.binaryRepo.Delete(r.Context(), fileMeta.BinID)
 	if err != nil {
-		h.logger.Warn().Err(err).Msg("Failed to delete physical file, might already be deleted or missing")
+		h.writeJSON(w, http.StatusInternalServerError, APIResponse{Success: false, Error: "Failed to delete file metadata"})
+		return
 	}
 
 	h.writeJSON(w, http.StatusOK, APIResponse{Success: true, Message: "File deleted successfully"})

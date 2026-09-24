@@ -12,6 +12,7 @@ type BinaryFileRepository interface {
 	GetByReferensiID(ctx context.Context, referensiID string, module string) ([]entity.BinaryFile, error)
 	GetPendingFiles(ctx context.Context, lastBinID int64, limit int) ([]entity.BinaryFile, error)
 	Insert(ctx context.Context, file *entity.BinaryFile) (int64, error)
+	Delete(ctx context.Context, binID int64) error
 	UpdatePathAndStatus(ctx context.Context, binID int64, path string, checksum string, size int64, flag string) error
 	GetMigrationStats(ctx context.Context) (*entity.MigrationStats, error)
 	GetExtensionStats(ctx context.Context) ([]entity.ExtensionStat, error)
