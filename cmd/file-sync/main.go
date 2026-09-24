@@ -30,7 +30,7 @@ func main() {
 	flag.Parse()
 
 	log := logger.NewLogger()
-	log.Info().Msg("Starting OmniBlob (pwni-file-sync) Object Storage & Sync Service...")
+	log.Info().Msg("Starting OmniBlob Object Storage & Sync Service...")
 
 	// 1. Load Configuration
 	configPath := *configFlag
@@ -131,7 +131,7 @@ func main() {
 
 	log.Info().
 		Int("port", cfg.Server.Port).
-		Msg("pwni-file-sync is fully running and ready to handle file requests from application servers.")
+		Msg("OmniBlob is fully running and ready to handle file requests from application servers.")
 
 	protocol := "http"
 	if cfg.Server.TLSEnabled {
@@ -162,7 +162,7 @@ func main() {
 		log.Error().Err(err).Msg("HTTP Server shutdown error")
 	}
 
-	log.Info().Msg("pwni-file-sync service stopped cleanly.")
+	log.Info().Msg("OmniBlob service stopped cleanly.")
 }
 
 func runLegacyScanner(dbPool *pgxpool.Pool, legacyPath string, log *zerolog.Logger) {
