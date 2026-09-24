@@ -53,9 +53,9 @@ func enforceLicensing(configKey string) (string, error) {
 		}
 
 		if status == license.StatusGracePeriod {
-			fmt.Printf("dY~? WARNING: License expired, but you are in grace period.\n")
+			fmt.Printf("\n[WARNING] License expired, but you are in grace period.\n\n")
 		} else {
-			fmt.Printf("dYs? Enterprise License (%s) Valid & Active. Thank you!\n", tier)
+			fmt.Printf("\n[SUCCESS] Enterprise License (%s) Valid & Active. Thank you!\n\n", tier)
 		}
 		return tier, nil
 	}
