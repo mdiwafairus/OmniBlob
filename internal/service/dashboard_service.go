@@ -11,14 +11,16 @@ import (
 )
 
 type DashboardService struct {
-	binaryRepo repository.BinaryFileRepository
-	logRepo    repository.LogRepository
+	binaryRepo  repository.BinaryFileRepository
+	logRepo     repository.LogRepository
+	licenseTier string
 }
 
-func NewDashboardService(binaryRepo repository.BinaryFileRepository, logRepo repository.LogRepository) *DashboardService {
+func NewDashboardService(binaryRepo repository.BinaryFileRepository, logRepo repository.LogRepository, licenseTier string) *DashboardService {
 	return &DashboardService{
-		binaryRepo: binaryRepo,
-		logRepo:    logRepo,
+		binaryRepo:  binaryRepo,
+		logRepo:     logRepo,
+		licenseTier: licenseTier,
 	}
 }
 
@@ -63,6 +65,7 @@ func (s *DashboardService) GetExecutiveSummary(ctx context.Context, destPath str
 		LegacyPath:          "/legacy",
 		ShardingType:        "date-based",
 		Clients:             clients,
+		LicenseTier:         s.licenseTier,
 		TotalLifetimeMigrations: totalJobs,
 		MigrationHistory:    jobHistory,
 	}

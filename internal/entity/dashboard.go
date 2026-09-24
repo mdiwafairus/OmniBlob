@@ -19,6 +19,7 @@ type DashboardSummary struct {
 	LegacyPath          string   `json:"legacy_path"`
 	ShardingType        string       `json:"sharding_type"`
 	Clients             []string     `json:"clients"`
+	LicenseTier         string       `json:"license_tier"`
 	TotalLifetimeMigrations int64    `json:"total_lifetime_migrations"`
 	MigrationHistory    []JobHistory `json:"migration_history"`
 }

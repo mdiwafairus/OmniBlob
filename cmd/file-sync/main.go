@@ -50,7 +50,8 @@ func main() {
 	log.Info().Str("config_path", configPath).Msg("Configuration loaded successfully")
 
 	// 1.5 Enforce Licensing & Trial System
-	if err := enforceLicensing(cfg.Server.ApiKey); err != nil {
+	licenseTier, err := enforceLicensing(cfg.Server.ApiKey)
+	if err != nil {
 		fmt.Printf("\n========================================================\n")
 		fmt.Printf("%v\n", err)
 		fmt.Printf("========================================================\n\n")
@@ -109,7 +110,7 @@ func main() {
 	// 6. Initialize HTTP API Server (MERGE CONFLICT RESOLVED)
 	physicalRepo := repository.NewPhysicalObjectRepository(dbPool)
 	handler := api.NewHandler(storageService, binaryRepo, physicalRepo, log, cfg.Server.MaxUploadSizeMB, cfg.Server.AllowedExtensions, cfg.Auth.AccessKey, cfg.Auth.SecretKey)
-	dashboardService := service.NewDashboardService(binaryRepo, logRepo)
+	dashboardService := service.NewDashboardService(binaryRepo, logRepo, licenseTier)
 	
 	var clientNames []string
 	for _, client := range cfg.Server.Clients {

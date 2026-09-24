@@ -168,6 +168,7 @@ export function Dashboard() {
     legacy_path: 'nfs://old-nas.internal/export',
     sharding_type: 'hash-based',
     clients: ['192.168.1.10', '192.168.1.11'],
+    license_tier: 'ENTERPRISE',
     sync_rate_mbps: 24.5,
     connected_endpoints: 12,
     delta_changes_today: 142,
@@ -221,7 +222,20 @@ export function Dashboard() {
     <div className="flex-1 w-full font-sans">
       <header className="bg-panel border-b border-line px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-4">
-           <h2 className="text-lg font-semibold text-ink">Overview</h2>
+         <h2 className="text-lg font-semibold text-ink flex items-center gap-3">
+            Overview
+            {rawData.license_tier && (
+               <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${
+                  rawData.license_tier === 'TRIAL' ? 'bg-amber/20 text-amber border border-amber/30' :
+                  rawData.license_tier === 'PRO' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                  'bg-cy/20 text-cy border border-cy/30'
+               }`}>
+                  {rawData.license_tier === 'ENTERPRISE' ? '👑 ENTERPRISE' : 
+                   rawData.license_tier === 'PRO' ? '⭐ PRO' : 
+                   '⏳ TRIAL'}
+               </span>
+            )}
+         </h2>
            <div className="h-6 w-px bg-linesoft"></div>
            <div className="relative flex items-center group">
               <Folder className="absolute left-3 w-4 h-4 text-dim group-hover:text-cy transition-colors pointer-events-none" />
