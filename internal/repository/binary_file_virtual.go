@@ -18,10 +18,19 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 		cleanPrefix += "/"
 	}
 
+	// HIGH-PERFORMANCE SQL AGGREGATION
+	// Offloads string splitting and grouping to PostgreSQL C-engine to prevent Go memory exhaustion.
 	query := `
-		SELECT path, size, create_date
+		SELECT 
+			split_part(substring(path from length($1) + 1), '/', 1) AS node_name,
+			BOOL_OR(position('/' in substring(path from length($1) + 1)) > 0) AS is_directory,
+			COALESCE(SUM(size), 0) as total_size,
+			MAX(create_date) as last_modified
 		FROM binary_file
 		WHERE path LIKE $1 || '%'
+		  AND length(path) > length($1)
+		GROUP BY node_name
+		ORDER BY is_directory DESC, node_name ASC
 	`
 	rows, err := r.db.Query(ctx, query, cleanPrefix)
 	if err != nil {
@@ -29,66 +38,31 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 	}
 	defer rows.Close()
 
-	nodesMap := make(map[string]*entity.VirtualNode)
+	var result []entity.VirtualNode
 
 	for rows.Next() {
-		var path sql.NullString
-		var size sql.NullInt64
-		var createDate sql.NullTime
-		if err := rows.Scan(&path, &size, &createDate); err != nil {
+		var name string
+		var isDirectory bool
+		var size int64
+		var modifiedTime sql.NullTime
+
+		if err := rows.Scan(&name, &isDirectory, &size, &modifiedTime); err != nil {
 			return nil, err
 		}
 
-		if !path.Valid || path.String == "" {
-			continue // Skip records with no path
-		}
-
-		validSize := int64(0)
-		if size.Valid {
-			validSize = size.Int64
-		}
-
 		validTime := time.Now()
-		if createDate.Valid {
-			validTime = createDate.Time
+		if modifiedTime.Valid {
+			validTime = modifiedTime.Time
 		}
 
-		relPath := strings.TrimPrefix(path.String, cleanPrefix)
-		if relPath == "" || (cleanPrefix != "" && relPath == path.String) {
-			continue // Should not happen given LIKE, but safe check
-		}
-
-		parts := strings.Split(relPath, "/")
-		name := parts[0]
-		isDirectory := len(parts) > 1
-
-		node, exists := nodesMap[name]
-		if !exists {
-			node = &entity.VirtualNode{
-				Name:         name,
-				Path:         cleanPrefix + name,
-				IsDirectory:  isDirectory,
-				Size:         0,
-				ModifiedTime: validTime,
-			}
-			nodesMap[name] = node
-		}
-
-		if isDirectory {
-			node.IsDirectory = true
-			node.Size += validSize
-			if validTime.After(node.ModifiedTime) {
-				node.ModifiedTime = validTime
-			}
-		} else {
-			node.Size = validSize
-			node.ModifiedTime = validTime
-		}
+		result = append(result, entity.VirtualNode{
+			Name:         name,
+			Path:         cleanPrefix + name,
+			IsDirectory:  isDirectory,
+			Size:         size,
+			ModifiedTime: validTime,
+		})
 	}
 
-	var result []entity.VirtualNode
-	for _, node := range nodesMap {
-		result = append(result, *node)
-	}
 	return result, nil
 }
