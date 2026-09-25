@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -31,15 +32,29 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 	nodesMap := make(map[string]*entity.VirtualNode)
 
 	for rows.Next() {
-		var path string
-		var size int64
-		var createDate time.Time
+		var path sql.NullString
+		var size sql.NullInt64
+		var createDate sql.NullTime
 		if err := rows.Scan(&path, &size, &createDate); err != nil {
 			return nil, err
 		}
 
-		relPath := strings.TrimPrefix(path, cleanPrefix)
-		if relPath == "" || (cleanPrefix != "" && relPath == path) {
+		if !path.Valid || path.String == "" {
+			continue // Skip records with no path
+		}
+
+		validSize := int64(0)
+		if size.Valid {
+			validSize = size.Int64
+		}
+
+		validTime := time.Now()
+		if createDate.Valid {
+			validTime = createDate.Time
+		}
+
+		relPath := strings.TrimPrefix(path.String, cleanPrefix)
+		if relPath == "" || (cleanPrefix != "" && relPath == path.String) {
 			continue // Should not happen given LIKE, but safe check
 		}
 
@@ -54,27 +69,26 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 				Path:         cleanPrefix + name,
 				IsDirectory:  isDirectory,
 				Size:         0,
-				ModifiedTime: createDate,
+				ModifiedTime: validTime,
 			}
 			nodesMap[name] = node
 		}
 
 		if isDirectory {
 			node.IsDirectory = true
-			node.Size += size
-			if createDate.After(node.ModifiedTime) {
-				node.ModifiedTime = createDate
+			node.Size += validSize
+			if validTime.After(node.ModifiedTime) {
+				node.ModifiedTime = validTime
 			}
 		} else {
-			node.Size = size
-			node.ModifiedTime = createDate
+			node.Size = validSize
+			node.ModifiedTime = validTime
 		}
 	}
 
 	var result []entity.VirtualNode
 	for _, node := range nodesMap {
 		result = append(result, *node)
-		fmt.Println("DEBUG added to result:", node.Name, node.IsDirectory)
 	}
 	return result, nil
 }
