@@ -476,10 +476,10 @@ export function Dashboard() {
                       <Tooltip formatter={(val: number) => formatBytes(val)} contentStyle={{ borderRadius: '8px', border: 'none', background: '#1f2d3b', color: '#fff' }} />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="w-[40%] flex flex-col justify-center gap-3 overflow-auto">
+                  <div className="w-[40%] flex flex-col gap-3 overflow-auto py-2">
                     {analytics.module_stats.map((entry, index) => (
                        <div key={index} className="flex items-center text-sm">
-                         <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                         <div className="w-3 h-3 rounded-full mr-2 shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
                          <span className="text-ink truncate flex-1">{entry.module}</span>
                          <span className="text-dim font-medium ml-2">{formatBytes(entry.size_bytes)}</span>
                        </div>
