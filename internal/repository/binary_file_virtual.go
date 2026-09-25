@@ -22,13 +22,13 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 	// Offloads string splitting and grouping to PostgreSQL C-engine to prevent Go memory exhaustion.
 	query := `
 		SELECT 
-			split_part(substring(path from length($1) + 1), '/', 1) AS node_name,
-			BOOL_OR(position('/' in substring(path from length($1) + 1)) > 0) AS is_directory,
-			COALESCE(SUM(size), 0) as total_size,
-			MAX(create_date) as last_modified
+			split_part(substring(path from length($1::text) + 1), '/', 1) AS node_name,
+			BOOL_OR(position('/' in substring(path from length($1::text) + 1)) > 0) AS is_directory,
+			COALESCE(SUM(size), 0)::bigint AS total_size,
+			MAX(create_date) AS last_modified
 		FROM binary_file
-		WHERE path LIKE $1 || '%'
-		  AND length(path) > length($1)
+		WHERE path LIKE $1::text || '%'
+		  AND length(path) > length($1::text)
 		GROUP BY node_name
 		ORDER BY is_directory DESC, node_name ASC
 	`
