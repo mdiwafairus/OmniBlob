@@ -37,10 +37,8 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 		if err := rows.Scan(&path, &size, &createDate); err != nil {
 			return nil, err
 		}
-		fmt.Println("DEBUG DB Path:", path)
 
 		relPath := strings.TrimPrefix(path, cleanPrefix)
-		fmt.Println("DEBUG relPath:", relPath, "cleanPrefix:", cleanPrefix)
 		if relPath == "" || (cleanPrefix != "" && relPath == path) {
 			continue // Should not happen given LIKE, but safe check
 		}
@@ -48,7 +46,6 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 		parts := strings.Split(relPath, "/")
 		name := parts[0]
 		isDirectory := len(parts) > 1
-		fmt.Println("DEBUG parts:", parts, "name:", name, "isDirectory:", isDirectory)
 
 		node, exists := nodesMap[name]
 		if !exists {
