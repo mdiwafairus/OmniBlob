@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"pwni-file-sync/internal/entity"
@@ -170,6 +172,9 @@ func (r *binaryFileRepository) Insert(ctx context.Context, file *entity.BinaryFi
 	if file.Flag == "" {
 		file.Flag = "1"
 	}
+	
+	// Sanitize path to prevent dirty data (remove leading slashes, replace backslashes)
+	file.Path = strings.TrimPrefix(filepath.ToSlash(file.Path), "/")
 
 	// Auto-generate next bin_id if not explicitly provided
 	if file.BinID <= 0 {

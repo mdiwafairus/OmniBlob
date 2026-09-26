@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v4"
 	"pwni-file-sync/internal/entity"
 )
 
@@ -18,22 +19,42 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 		cleanPrefix += "/"
 	}
 
+	var query string
+	var rows pgx.Rows
+	var err error
+
 	// HIGH-PERFORMANCE SQL AGGREGATION
 	// Offloads string splitting and grouping to PostgreSQL C-engine to prevent Go memory exhaustion.
-	query := `
-		SELECT 
-			split_part(substring(path from length($1::text) + 1), '/', 1) AS node_name,
-			BOOL_OR(position('/' in substring(path from length($1::text) + 1)) > 0) AS is_directory,
-			COALESCE(SUM(size), 0)::bigint AS total_size,
-			MAX(create_date) AS last_modified
-		FROM binary_file
-		WHERE path LIKE $1::text || '%'
-		  AND length(path) > length($1::text)
-		GROUP BY node_name
-		ORDER BY is_directory DESC, node_name ASC
-		LIMIT 500
-	`
-	rows, err := r.db.Query(ctx, query, cleanPrefix)
+	if cleanPrefix == "" {
+		query = `
+			SELECT 
+				split_part(ltrim(path, '/'), '/', 1) AS node_name,
+				BOOL_OR(position('/' in ltrim(path, '/')) > 0) AS is_directory,
+				COALESCE(SUM(size), 0)::bigint AS total_size,
+				MAX(create_date) AS last_modified
+			FROM binary_file
+			WHERE length(path) > 0
+			GROUP BY node_name
+			ORDER BY is_directory DESC, node_name ASC
+			LIMIT 5000
+		`
+		rows, err = r.db.Query(ctx, query)
+	} else {
+		query = `
+			SELECT 
+				split_part(substring(path from length($1::text) + 1), '/', 1) AS node_name,
+				BOOL_OR(position('/' in substring(path from length($1::text) + 1)) > 0) AS is_directory,
+				COALESCE(SUM(size), 0)::bigint AS total_size,
+				MAX(create_date) AS last_modified
+			FROM binary_file
+			WHERE path LIKE $1::text || '%'
+			  AND length(path) > length($1::text)
+			GROUP BY node_name
+			ORDER BY is_directory DESC, node_name ASC
+			LIMIT 5000
+		`
+		rows, err = r.db.Query(ctx, query, cleanPrefix)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("GetVirtualDirectory query: %w", err)
 	}
@@ -49,6 +70,10 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 
 		if err := rows.Scan(&name, &isDirectory, &size, &modifiedTime); err != nil {
 			return nil, err
+		}
+
+		if name == "" {
+			continue
 		}
 
 		validTime := time.Now()
