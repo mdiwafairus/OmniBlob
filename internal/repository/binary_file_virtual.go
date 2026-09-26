@@ -31,6 +31,7 @@ func (r *binaryFileRepository) GetVirtualDirectory(ctx context.Context, prefix s
 		  AND length(path) > length($1::text)
 		GROUP BY node_name
 		ORDER BY is_directory DESC, node_name ASC
+		LIMIT 500
 	`
 	rows, err := r.db.Query(ctx, query, cleanPrefix)
 	if err != nil {

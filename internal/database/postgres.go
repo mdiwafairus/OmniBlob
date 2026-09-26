@@ -147,6 +147,9 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool, log *zerolog.Logger) e
 		);`,
 		`ALTER TABLE binary_file ADD COLUMN IF NOT EXISTS app_name VARCHAR(100) DEFAULT '';`,
 		`CREATE INDEX IF NOT EXISTS idx_binary_file_app_name ON binary_file (app_name);`,
+		// B-tree index with text_pattern_ops enables index scan for LIKE 'prefix%' queries in Storage Explorer.
+		// Without this, GetVirtualDirectory does a sequential scan on all ~2M rows → Page Unresponsive.
+		`CREATE INDEX IF NOT EXISTS idx_binary_file_path_prefix ON binary_file (path text_pattern_ops);`,
 	}
 
 	for _, q := range queries {
