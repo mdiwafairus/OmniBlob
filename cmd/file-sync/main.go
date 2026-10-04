@@ -22,12 +22,20 @@ import (
 	"github.com/rs/zerolog"
 )
 
+var Version = "v1.0.0"
+
 func main() {
+	versionFlag := flag.Bool("version", false, "Print version information and exit")
 	configFlag := flag.String("config", "configs/config.yaml", "Path to configuration file")
 	portFlag := flag.Int("port", 0, "Override server port")
 	maxUploadFlag := flag.Int("max-upload", 0, "Override max upload size in MB")
 	scanLegacy := flag.Bool("scan-legacy", false, "Scan legacy_path and automatically populate the database for migration")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("OmniBlob Storage Engine\nVersion: %s\n", Version)
+		os.Exit(0)
+	}
 
 	log := logger.NewLogger()
 	log.Info().Msg("Starting OmniBlob Object Storage & Sync Service...")
@@ -116,7 +124,7 @@ func main() {
 	for _, client := range cfg.Server.Clients {
 		clientNames = append(clientNames, client.Name)
 	}
-	dashboardHandler := api.NewDashboardHandler(dashboardService, &cfg.Storage, clientNames)
+	dashboardHandler := api.NewDashboardHandler(dashboardService, &cfg.Storage, clientNames, cfg.Migration.Enabled)
 	explorerHandler := api.NewExplorerHandler(&cfg.Storage, &cfg.Migration, log, binaryRepo)
 	
 	router := api.NewRouter(handler, dashboardHandler, explorerHandler, &cfg.Server, &cfg.Security, auditLogger, cfg.Auth.SecretKey, log, dbPool)

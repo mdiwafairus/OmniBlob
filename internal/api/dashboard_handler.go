@@ -12,13 +12,15 @@ type DashboardHandler struct {
 	dashboardService *service.DashboardService
 	storageConfig    *config.StorageConfig
 	clients          []string
+	migrationEnabled bool
 }
 
-func NewDashboardHandler(dashboardService *service.DashboardService, storageConfig *config.StorageConfig, clients []string) *DashboardHandler {
+func NewDashboardHandler(dashboardService *service.DashboardService, storageConfig *config.StorageConfig, clients []string, migrationEnabled bool) *DashboardHandler {
 	return &DashboardHandler{
 		dashboardService: dashboardService,
 		storageConfig:    storageConfig,
 		clients:          clients,
+		migrationEnabled: migrationEnabled,
 	}
 }
 
@@ -33,6 +35,8 @@ func (h *DashboardHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get dashboard summary: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	
+	summary.MigrationEnabled = h.migrationEnabled
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(summary)

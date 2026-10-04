@@ -100,7 +100,7 @@ export function Dashboard() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   
   // Interactive toggle for the client to preview the two states
-  const [isDemoMigration, setIsDemoMigration] = useState(false);
+  
   
   // State for global folder filter
   const [selectedFolder, setSelectedFolder] = useState<string>('all');
@@ -208,7 +208,7 @@ export function Dashboard() {
   const COLORS = ['#5bc8dc', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
 
   // Determine active mode based on backend OR local demo toggle
-  const showMigrationUI = summary && summary.migration_enabled !== undefined ? summary.migration_enabled : isDemoMigration;
+  const showMigrationUI = summary?.migration_enabled === true;
 
   // Extract available folders/clients dynamically or fallback to mock
   const availableFolders = [...(rawData.clients || [])];
@@ -253,22 +253,7 @@ export function Dashboard() {
            </div>
         </div>
         
-        {/* Toggle to let user switch modes for Demo */}
-        <div className="flex items-center gap-2 bg-panel2 p-1 rounded-lg border border-line">
-           <span className="text-xs font-semibold uppercase tracking-widest text-faint ml-2 mr-2">Demo Mode:</span>
-           <button 
-              onClick={() => setIsDemoMigration(false)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${!isDemoMigration ? 'bg-panel shadow-sm text-cy' : 'text-dim hover:text-ink'}`}
-           >
-              Sync Only
-           </button>
-           <button 
-              onClick={() => setIsDemoMigration(true)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${isDemoMigration ? 'bg-amber text-panel shadow-sm shadow-amber/20' : 'text-dim hover:text-ink'}`}
-           >
-              Sync + Migration
-           </button>
-        </div>
+        
       </header>
 
       <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-6">

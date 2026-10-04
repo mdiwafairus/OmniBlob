@@ -27,8 +27,17 @@ type AuditEntry struct {
 
 type AuditLogger struct {
 	mu       sync.Mutex
-	file     *os.File
+	writer   *DailyWriter
 	lastHash string
+}
+
+func getLatestAuditFile(logDir string) string {
+	files, err := filepath.Glob(filepath.Join(logDir, "audit-*.log"))
+	if err != nil || len(files) == 0 {
+		return ""
+	}
+	// Glob returns sorted paths, so YYYY-MM-DD will sort naturally
+	return files[len(files)-1]
 }
 
 func NewAuditLogger(logDir string) (*AuditLogger, error) {
@@ -36,31 +45,32 @@ func NewAuditLogger(logDir string) (*AuditLogger, error) {
 		return nil, fmt.Errorf("create audit log dir: %v", err)
 	}
 
-	logPath := filepath.Join(logDir, "audit.log")
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
-	if err != nil {
-		return nil, fmt.Errorf("open audit log file: %v", err)
-	}
-
-	// Read last line to get previous hash
 	lastHash := "0000000000000000000000000000000000000000000000000000000000000000" // Genesis block hash
-	scanner := bufio.NewScanner(file)
-	var lastLine string
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			lastLine = line
-		}
-	}
-	if lastLine != "" {
-		var lastEntry AuditEntry
-		if err := json.Unmarshal([]byte(lastLine), &lastEntry); err == nil && lastEntry.CurrentHash != "" {
-			lastHash = lastEntry.CurrentHash
+	latestFile := getLatestAuditFile(logDir)
+	
+	if latestFile != "" {
+		file, err := os.Open(latestFile)
+		if err == nil {
+			scanner := bufio.NewScanner(file)
+			var lastLine string
+			for scanner.Scan() {
+				line := strings.TrimSpace(scanner.Text())
+				if line != "" {
+					lastLine = line
+				}
+			}
+			file.Close()
+			if lastLine != "" {
+				var lastEntry AuditEntry
+				if err := json.Unmarshal([]byte(lastLine), &lastEntry); err == nil && lastEntry.CurrentHash != "" {
+					lastHash = lastEntry.CurrentHash
+				}
+			}
 		}
 	}
 
 	return &AuditLogger{
-		file:     file,
+		writer:   NewDailyWriter(logDir, "audit"),
 		lastHash: lastHash,
 	}, nil
 }
@@ -88,21 +98,12 @@ func (a *AuditLogger) LogConnection(remoteAddr, xForwardedFor, action, reason st
 	
 	finalJSON, _ := json.Marshal(entry)
 	
-	if _, err := a.file.WriteString(string(finalJSON) + "\n"); err != nil {
-		return err
-	}
-	// Sync immediately to ensure audit integrity
-	_ = a.file.Sync()
-
+	_, err := a.writer.Write(append(finalJSON, '\n'))
+	
 	a.lastHash = currentHashStr
-	return nil
+	return err
 }
 
 func (a *AuditLogger) Close() error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.file != nil {
-		return a.file.Close()
-	}
-	return nil
+	return a.writer.Close()
 }

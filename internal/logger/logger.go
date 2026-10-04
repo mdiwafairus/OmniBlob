@@ -16,17 +16,6 @@ func NewLogger() zerolog.Logger {
 }
 
 func NewSuspectLogger() zerolog.Logger {
-	// Create logs directory if it doesn't exist
-	if err := os.MkdirAll("logs", 0755); err != nil {
-		// fallback to stdout if we can't create directory
-		return NewLogger()
-	}
-	
-	file, err := os.OpenFile("logs/suspect.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		// fallback to stdout
-		return NewLogger()
-	}
-	
-	return zerolog.New(file).With().Timestamp().Logger()
+	writer := NewDailyWriter("logs", "suspect")
+	return zerolog.New(writer).With().Timestamp().Logger()
 }
